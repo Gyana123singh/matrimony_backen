@@ -1,0 +1,266 @@
+const User = require("../../models/User");
+
+// Search profiles
+exports.searchProfiles = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const {
+      gender,
+      minAge,
+      maxAge,
+      religion,
+      caste,
+      education,
+      location,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const query = {
+      _id: { $ne: userId },
+      isActive: true,
+      isBanned: false,
+    };
+
+    if (gender) query.gender = gender;
+    if (religion) query.religion = religion;
+    if (caste) query.caste = caste;
+    if (education) query.education = education;
+    if (location) query.jobLocation = new RegExp(location, "i");
+
+    // Age filter
+    if (minAge || maxAge) {
+      const now = new Date();
+      if (minAge) {
+        const maxDate = new Date(
+          now.getFullYear() - minAge,
+          now.getMonth(),
+          now.getDate(),
+        );
+        query.dateOfBirth = { $lte: maxDate };
+      }
+      if (maxAge) {
+        const minDate = new Date(
+          now.getFullYear() - maxAge,
+          now.getMonth(),
+          now.getDate(),
+        );
+        if (query.dateOfBirth) {
+          query.dateOfBirth.$gte = minDate;
+        } else {
+          query.dateOfBirth = { $gte: minDate };
+        }
+      }
+    }
+
+    const skip = (page - 1) * limit;
+
+    const profiles = await User.find(query)
+      .select("-password")
+      .limit(limit)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await User.countDocuments(query);
+
+    res.status(200).json({
+      message: "Profiles fetched successfully",
+      profiles,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error searching profiles:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get recommended matches
+exports.getMatches = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { page = 1, limit = 10 } = req.query;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const query = {
+      _id: { $ne: userId },
+      isActive: true,
+      isBanned: false,
+    };
+
+    // Apply user preferences
+    if (user.preferredGender) query.gender = user.preferredGender;
+    if (user.preferredReligion) query.religion = user.preferredReligion;
+    if (user.preferredCaste) query.caste = user.preferredCaste;
+
+    const skip = (page - 1) * limit;
+
+    const matches = await User.find(query)
+      .select("-password")
+      .limit(limit)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await User.countDocuments(query);
+
+    res.status(200).json({
+      message: "Matches fetched successfully",
+      matches,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching matches:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// View profile
+exports.viewProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { profileId } = req.params;
+
+    const profile = await User.findById(profileId).select("-password");
+
+    if (!profile || !profile.isActive || profile.isBanned) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    // Add to visitors
+    const isAlreadyVisited = profile.visitors.some(
+      (v) => v.userId.toString() === userId.toString(),
+    );
+
+    if (!isAlreadyVisited) {
+      profile.visitors.push({
+        userId,
+        visitedAt: new Date(),
+      });
+      await profile.save();
+    }
+
+    res.status(200).json({
+      message: "Profile retrieved successfully",
+      profile,
+    });
+  } catch (error) {
+    console.error("Error viewing profile:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get visitors
+exports.getVisitors = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { page = 1, limit = 10 } = req.query;
+
+    const user = await User.findById(userId).populate({
+      path: "visitors.userId",
+      select: "-password",
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const visitors = user.visitors.slice((page - 1) * limit, page * limit);
+
+    res.status(200).json({
+      message: "Visitors retrieved successfully",
+      visitors,
+      pagination: {
+        total: user.visitors.length,
+        page,
+        pages: Math.ceil(user.visitors.length / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching visitors:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Block user
+exports.blockUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { blockedUserId } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $addToSet: { blockedUsers: blockedUserId },
+      },
+      { new: true },
+    ).select("-password");
+
+    res.status(200).json({
+      message: "User blocked successfully",
+      user,
+    });
+  } catch (error) {
+    console.error("Error blocking user:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Unblock user
+exports.unblockUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { blockedUserId } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $pull: { blockedUsers: blockedUserId },
+      },
+      { new: true },
+    ).select("-password");
+
+    res.status(200).json({
+      message: "User unblocked successfully",
+      user,
+    });
+  } catch (error) {
+    console.error("Error unblocking user:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get blocked users
+exports.getBlockedUsers = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId).populate({
+      path: "blockedUsers",
+      select: "-password",
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Blocked users retrieved successfully",
+      blockedUsers: user.blockedUsers,
+    });
+  } catch (error) {
+    console.error("Error fetching blocked users:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
