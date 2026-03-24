@@ -18,95 +18,78 @@ const app = express();
 
 // ================== DATABASE ==================
 connectDB();
+seedAdmin();
 
-// ✅ Run seeder only in development
-if (process.env.NODE_ENV !== "production") {
-  seedAdmin();
-}
+// ================== MIDDLEWARES ==================
 
-// ================== ENV CHECK ==================
-const isProduction = process.env.NODE_ENV === "production";
-
-// ================== ALLOWED ORIGINS ==================
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://127.0.0.1:5173",
-  "http://127.0.0.1:5174",
-  "https://marathishubhavivah.com",
-];
-
-// ================== CORS ==================
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin:
+      process.env.NODE_ENV === "production"
+        ? "https://marathishubhavivah.com"
+        : [
+          "http://localhost:5174",
+          "http://localhost:5173",
+          "http://127.0.0.1:5174",
+          "http://127.0.0.1:5173",
+          "https://marathishubhavivah.com",
+        ],
     credentials: true,
-  })
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
 );
 
-// ================== BODY PARSER ==================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ================== SESSION (FINAL FIX) ==================
+// ================== SESSION ==================
+
 app.use(
   session({
-    name: "connect.sid",
     secret: process.env.SESSION_SECRET || "matrimonial_captcha_secret",
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true,
     cookie: {
-      secure: isProduction,               // ✅ dynamic
+      secure: process.env.NODE_ENV === "production", // true only in https
       httpOnly: true,
-      sameSite: isProduction ? "none" : "lax", // ✅ dynamic fix
-      maxAge: 5 * 60 * 1000,
+      sameSite: "lax", // Allow same-site requests from different ports
+      maxAge: 5 * 60 * 1000, // 5 minutes
+      domain: undefined, // Let the browser handle the domain
     },
-  })
+  }),
 );
 
 // ================== ROUTES ==================
+
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 
 // ================== HEALTH CHECK ==================
+
 app.get("/", (req, res) => {
   res.send("Matrimonial Backend Is Running");
 });
 
-// ================== SOCKET.IO ==================
+// ================== SOCKET.IO SETUP ==================
+
 const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by Socket.IO CORS"));
-      }
-    },
+    origin: true,
     credentials: true,
   },
   transports: ["websocket", "polling"],
 });
 
-// Initialize socket events
+// Initialize all socket events
 initializeSocketEvents(io);
 
-// Make io accessible
+// Make io accessible to request handlers via req.app.get('io')
 app.set("io", io);
 
 // ================== SERVER ==================
+
 const PORT = process.env.PORT || 5002;
 
 server.listen(PORT, () => {

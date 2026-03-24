@@ -110,18 +110,8 @@ exports.loginUser = async (req, res) => {
   try {
     const { emailOrPhone, password, captcha } = req.body;
 
-    // ================= DEBUG (REMOVE LATER) =================
-    console.log("BODY:", req.body);
-    console.log("SESSION CAPTCHA:", req.session?.captcha);
-
-    // ================= VALIDATION =================
-    if (!emailOrPhone || !password || !captcha) {
-      return res.status(400).json({
-        message: "All fields are required",
-      });
-    }
-
     // ================= CAPTCHA CHECK =================
+
     if (!req.session || !req.session.captcha) {
       return res.status(400).json({
         message: "Captcha expired. Please refresh.",
@@ -129,6 +119,7 @@ exports.loginUser = async (req, res) => {
     }
 
     if (
+      !captcha ||
       captcha.toLowerCase() !== req.session.captcha.toLowerCase()
     ) {
       return res.status(400).json({
@@ -136,10 +127,11 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ✅ Clear captcha after success
+    // clear captcha after verification
     delete req.session.captcha;
 
     // ================= FIND USER =================
+
     const user = await User.findOne({
       $or: [{ email: emailOrPhone }, { phone: emailOrPhone }],
     });
@@ -150,7 +142,8 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ================= ACCOUNT STATUS =================
+    // ================= CHECK ACCOUNT STATUS =================
+
     if (!user.isActive) {
       return res.status(403).json({
         message: "Account is disabled",
@@ -158,6 +151,7 @@ exports.loginUser = async (req, res) => {
     }
 
     // ================= PASSWORD CHECK =================
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -166,31 +160,30 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ================= TOKEN =================
+    // ================= CREATE TOKEN =================
+
     const token = jwt.sign(
       {
         id: user._id,
         role: user.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
-    // ================= RESPONSE =================
+    // remove password from response
     const userData = user.toObject();
     delete userData.password;
 
-    return res.status(200).json({
-      success: true,
+    res.status(200).json({
       message: "Login successful",
       token,
       user: userData,
     });
-
   } catch (error) {
     console.error("Login error:", error);
 
-    return res.status(500).json({
+    res.status(500).json({
       message: "Server error",
     });
   }
