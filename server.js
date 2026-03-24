@@ -43,20 +43,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ================== SESSION ==================
+app.set("trust proxy", 1);
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "matrimonial_captcha_secret",
+    secret: process.env.SESSION_SECRET, // ✅ no fallback
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // true only in https
+      secure: true,
       httpOnly: true,
-      sameSite: "lax", // Allow same-site requests from different ports
-      maxAge: 5 * 60 * 1000, // 5 minutes
-      domain: undefined, // Let the browser handle the domain
+      sameSite: "none",
+      maxAge: 5 * 60 * 1000,
     },
-  }),
+  })
 );
 
 // ================== ROUTES ==================
