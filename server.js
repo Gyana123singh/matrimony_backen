@@ -47,13 +47,14 @@ app.set("trust proxy", 1);
 
 app.use(
   session({
-    secret: process.env.SESSION_SECRET, // ✅ no fallback
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: true,
+      secure: process.env.NODE_ENV === "production", // ✅ FIX
       httpOnly: true,
-      sameSite: "none",
+      sameSite:
+        process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ FIX
       maxAge: 5 * 60 * 1000,
     },
   })
