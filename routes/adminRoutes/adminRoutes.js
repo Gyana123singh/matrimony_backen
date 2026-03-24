@@ -13,13 +13,11 @@ const { isAdmin } = require("../../middleware/role.middleware");
 // Public routes
 router.post("/login", adminLogin);
 
-// Protected routes
-router.use(protect);
-router.use(isAdmin);
+
 
 router.use("/dashboard", dashboardRoutes);
-router.use("/users", userRoutes);
-router.use("/", paymentRoutes);
-router.use("/", reportRoutes);
+router.use("/users", protect, isAdmin, userRoutes);
+router.use("/payments", protect, isAdmin, paymentRoutes);
+router.use("/reports", protect, isAdmin, reportRoutes);
 
 module.exports = router;

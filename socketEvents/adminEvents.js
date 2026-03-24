@@ -1,6 +1,7 @@
 // Handle admin-related socket events
 const Report = require("../models/Report");
 const Ticket = require("../models/Ticket");
+const User = require("../models/User");
 
 const registerAdminEvents = (io, socket) => {
   // Admin login
@@ -31,8 +32,8 @@ const registerAdminEvents = (io, socket) => {
       const { reportId, reportedUserId, reportedByUserId, reason } = data;
 
       const report = await Report.findById(reportId)
-        .populate("reportedUser", "firstName lastName profilePhoto")
-        .populate("reportedBy", "firstName lastName");
+        .populate("reportedUserId", "firstName lastName profilePhoto")
+        .populate("reportedByUserId", "firstName lastName");
 
       // Broadcast to all admins
       io.to("admin:all").emit("report:new", {
@@ -58,8 +59,8 @@ const registerAdminEvents = (io, socket) => {
       const { ticketId } = data;
 
       const ticket = await Ticket.findById(ticketId)
-        .populate("user", "firstName lastName email")
-        .populate("assignedTo", "firstName lastName");
+        .populate("userId", "firstName lastName email")
+        .populate("assignedToAdmin", "firstName lastName");
 
       // Broadcast to all admins
       io.to("admin:all").emit("ticket:new", {
@@ -94,7 +95,7 @@ const registerAdminEvents = (io, socket) => {
 
       // If ban action, update user status
       if (action === "ban") {
-        await User.findByIdAndUpdate(report.reportedUser, {
+        await User.findByIdAndUpdate(report.reportedUserId, {
           isBanned: true,
           banReason: notes,
           bannedAt: new Date(),
@@ -126,11 +127,15 @@ const registerAdminEvents = (io, socket) => {
     try {
       const { ticketId, adminId } = data;
 
-      const ticket = await Ticket.findByIdAndUpdate(ticketId, {
-        assignedTo: adminId,
-        assignedAt: new Date(),
-        status: "assigned",
-      });
+      const ticket = await Ticket.findByIdAndUpdate(
+        ticketId,
+        {
+          assignedToAdmin: adminId,
+          assignedAt: new Date(),
+          status: "assigned",
+        },
+        { new: true },
+      ).populate("userId", "firstName lastName email");
 
       // Notify all admins
       io.to("admin:all").emit("ticket:assigned", {
@@ -162,22 +167,22 @@ const registerAdminEvents = (io, socket) => {
         {
           $push: {
             replies: {
-              sender: adminId,
+              senderType: "admin",
+              senderId: adminId,
               message: reply,
               sentAt: new Date(),
-              isAdmin: true,
             },
           },
-          status: "replied",
+          status: "answered",
           updatedAt: new Date(),
         },
         { new: true },
       )
-        .populate("user", "firstName lastName email")
-        .populate("assignedTo", "firstName lastName");
+        .populate("userId", "firstName lastName email")
+        .populate("assignedToAdmin", "firstName lastName");
 
       // Notify ticket creator and all admins
-      const ticketUserId = ticket.user._id;
+      const ticketUserId = ticket.userId._id;
       io.to(`user:${ticketUserId}`).emit("ticket:replied", {
         ticketId,
         reply,
@@ -209,18 +214,24 @@ const registerAdminEvents = (io, socket) => {
     try {
       const { ticketId, closureReason } = data;
 
-      const ticket = await Ticket.findByIdAndUpdate(ticketId, {
-        status: "closed",
-        closureReason,
-        closedAt: new Date(),
-      });
+      const ticket = await Ticket.findByIdAndUpdate(
+        ticketId,
+        {
+          status: "closed",
+          closureReason,
+          closedAt: new Date(),
+        },
+        { new: true },
+      );
 
       // Notify ticket creator
-      io.to(`user:${ticket.user}`).emit("ticket:closed", {
-        ticketId,
-        reason: closureReason,
-        closedAt: new Date(),
-      });
+      if (ticket && ticket.userId) {
+        io.to(`user:${ticket.userId}`).emit("ticket:closed", {
+          ticketId,
+          reason: closureReason,
+          closedAt: new Date(),
+        });
+      }
 
       // Notify all admins
       io.to("admin:all").emit("ticket:closedNotification", {

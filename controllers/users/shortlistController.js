@@ -138,6 +138,28 @@ exports.reportUser = async (req, res) => {
 
     await report.save();
 
+    // Emit real-time notification to admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const populated = await Report.findById(report._id)
+          .populate("reportedByUserId", "firstName lastName")
+          .populate("reportedUserId", "firstName lastName profilePhoto");
+
+        io.to("admin:all").emit("report:new", {
+          _id: populated._id,
+          reportedUser: populated.reportedUserId,
+          reportedBy: populated.reportedByUserId,
+          reason: populated.reason,
+          description: populated.description,
+          createdAt: populated.createdAt,
+          status: populated.status,
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting report event:", err);
+    }
+
     res.status(201).json({
       message: "Report submitted successfully",
       report,

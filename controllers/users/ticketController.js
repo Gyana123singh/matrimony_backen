@@ -16,6 +16,30 @@ exports.createTicket = async (req, res) => {
 
     await ticket.save();
 
+    // Emit real-time notification to admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const populated = await Ticket.findById(ticket._id).populate(
+          "userId",
+          "firstName lastName email",
+        );
+
+        io.to("admin:all").emit("ticket:new", {
+          _id: populated._id,
+          user: populated.userId,
+          subject: populated.subject,
+          description: populated.description,
+          category: populated.category,
+          priority: populated.priority,
+          status: populated.status,
+          createdAt: populated.createdAt,
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting ticket event:", err);
+    }
+
     res.status(201).json({
       message: "Support ticket created successfully",
       ticket,
@@ -111,6 +135,26 @@ exports.addReply = async (req, res) => {
 
     await ticket.save();
 
+    // Emit user reply event to admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        const populated = await Ticket.findById(ticket._id).populate(
+          "userId",
+          "firstName lastName email",
+        );
+
+        io.to("admin:all").emit("ticket:userReply", {
+          ticketId: ticket._id,
+          user: populated.userId,
+          message,
+          sentAt: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting ticket reply event:", err);
+    }
+
     res.status(200).json({
       message: "Reply added successfully",
       ticket,
@@ -140,6 +184,19 @@ exports.closeTicket = async (req, res) => {
     ticket.status = "closed";
     ticket.closedAt = new Date();
     await ticket.save();
+
+    // Emit closed event to admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("ticket:closedNotification", {
+          ticketId: ticket._id,
+          closedAt: ticket.closedAt,
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting ticket closed event:", err);
+    }
 
     res.status(200).json({
       message: "Ticket closed successfully",

@@ -1,6 +1,7 @@
 const Payment = require("../../models/Payment");
 const Package = require("../../models/Package");
 const User = require("../../models/User");
+const Notification = require("../../models/Notification");
 
 // Get available packages
 exports.getPackages = async (req, res) => {
@@ -196,6 +197,80 @@ exports.cancelSubscription = async (req, res) => {
     });
   } catch (error) {
     console.error("Error cancelling subscription:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+exports.confirmPayment = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { paymentId, transactionId } = req.body;
+
+    const payment = await Payment.findById(paymentId);
+    const package = await Package.findOne({ name: payment.packageName });
+
+    if (!payment || !package) {
+      return res.status(404).json({ message: "Invalid payment" });
+    }
+
+    payment.status = "success";
+    payment.transactionId = transactionId;
+
+    const startDate = new Date();
+    const endDate = new Date(
+      Date.now() + package.duration * 24 * 60 * 60 * 1000
+    );
+
+    payment.startDate = startDate;
+    payment.endDate = endDate;
+
+    await payment.save();
+
+    // ✅ UPDATE USER SUBSCRIPTION + FEATURES
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        subscriptionPlan: package.name,
+        subscriptionStatus: "active",
+        subscriptionStartDate: startDate,
+        subscriptionEndDate: endDate,
+
+        subscriptionFeatures: {
+          contactViews: package.contactViews,
+          interestExpress: package.interestExpress,
+          imageUploads: package.imageUploads,
+        },
+
+        $inc: { totalSpent: package.price },
+      },
+      { new: true }
+    );
+
+    // ✅ CREATE NOTIFICATION
+    await Notification.create({
+      userId,
+      title: "Subscription Activated 🎉",
+      message: `Your ${package.name} plan is now active`,
+      type: "promo",
+    });
+
+    // ✅ SOCKET REALTIME
+    const io = req.app.get("io");
+    io.to(`user:${userId}`).emit("notification:new", {
+      title: "Subscription Activated 🎉",
+      message: `Your ${package.name} plan is active`,
+    });
+
+    res.status(200).json({
+      message: "Payment successful",
+      payment,
+      user,
+    });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };

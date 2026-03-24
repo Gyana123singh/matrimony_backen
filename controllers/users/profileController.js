@@ -169,7 +169,7 @@ exports.updatePreferences = async (req, res) => {
 };
 
 // Add photos
-exports.addPhotos =   async (req, res) => {
+exports.addPhotos = async (req, res) => {
   try {
     const userId = req.user._id;
     const { photoUrl } = req.body;
@@ -476,3 +476,109 @@ exports.getVisitorsPage = async (req, res) => {
     });
   }
 };
+
+
+// ===============================
+// 🎯 GET USER BY ID (PUBLIC PROFILE)
+// ===============================
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id)
+      .select("-password -otp -otpExpiry -otpAttempts -__v");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.error("Get User Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+// controllers/profileController.js
+
+
+
+exports.viewProfile = async (req, res) => {
+  try {
+    const viewerId = req.user._id;       // logged in user
+    const profileId = req.params.id;     // profile being viewed
+
+    if (viewerId.toString() === profileId) {
+      return res.status(200).json({ message: "Own profile" });
+    }
+
+    // ✅ Add to viewedProfiles (viewer side)
+    await User.findByIdAndUpdate(viewerId, {
+      $push: {
+        visitedProfiles: {
+          userId: profileId,
+          visitedAt: new Date(),
+        },
+      },
+    });
+
+    // ✅ Add to visitors (target user side)
+    await User.findByIdAndUpdate(profileId, {
+      $push: {
+        visitors: {
+          userId: viewerId,
+          visitedAt: new Date(),
+        },
+      },
+    });
+
+    res.status(200).json({ message: "Profile viewed" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error tracking view" });
+  }
+};
+
+exports.getVisitors = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .populate("visitors.userId", "firstName lastName profilePhoto jobLocation");
+
+    res.json(user.visitors);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching visitors" });
+  }
+};
+exports.getVisitorStats = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    const totalViews = user.visitors.length;
+
+    const likedYou = user.interests.filter(
+      (i) => i.status === "received"
+    ).length;
+
+    const sentInterest = user.interests.filter(
+      (i) => i.status === "sent"
+    ).length;
+
+    res.json({
+      totalViews,
+      likedYou,
+      sentInterest,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching stats" });
+  }
+};
+
+

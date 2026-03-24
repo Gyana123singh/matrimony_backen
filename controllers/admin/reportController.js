@@ -100,6 +100,27 @@ exports.resolveReport = async (req, res) => {
       message: "Report resolved successfully",
       report,
     });
+    // Emit real-time update to admins and affected user
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("report:resolved", {
+          reportId: report._id,
+          status: action === "dismiss" ? "dismissed" : "resolved",
+          action,
+          resolvedAt: report.resolvedAt || new Date(),
+        });
+
+        if (action === "ban") {
+          io.to(`user:${report.reportedUserId}`).emit("user:banned", {
+            reason: adminNotes || "Violation of terms",
+            bannedAt: new Date(),
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error emitting report resolved event:", err);
+    }
   } catch (error) {
     console.error("Error resolving report:", error);
     res.status(500).json({ message: "Server error" });
@@ -132,6 +153,18 @@ exports.dismissReport = async (req, res) => {
       message: "Report dismissed successfully",
       report,
     });
+    // Emit real-time update to admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("report:dismissed", {
+          reportId: report._id,
+          resolvedAt: report.resolvedAt || new Date(),
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting report dismissed event:", err);
+    }
   } catch (error) {
     console.error("Error dismissing report:", error);
     res.status(500).json({ message: "Server error" });
@@ -220,6 +253,26 @@ exports.assignTicket = async (req, res) => {
       message: "Ticket assigned successfully",
       ticket,
     });
+    // Emit real-time update to admins and ticket owner
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("ticket:assigned", {
+          ticketId: ticket._id,
+          assignedTo: adminId,
+          timestamp: new Date(),
+        });
+
+        if (ticket.userId) {
+          io.to(`user:${ticket.userId}`).emit("ticket:assignedToAdmin", {
+            ticketId: ticket._id,
+            assignedTo: adminId,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error emitting ticket assigned event:", err);
+    }
   } catch (error) {
     console.error("Error assigning ticket:", error);
     res.status(500).json({ message: "Server error" });
@@ -253,6 +306,27 @@ exports.addReply = async (req, res) => {
       message: "Reply added successfully",
       ticket,
     });
+    // Emit real-time notification to ticket owner and admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to(`user:${ticket.userId}`).emit("ticket:replied", {
+          ticketId: ticket._id,
+          reply: message,
+          repliedBy: adminId,
+          repliedAt: new Date(),
+        });
+
+        io.to("admin:all").emit("ticket:replyNotification", {
+          ticketId: ticket._id,
+          reply: message,
+          admin: adminId,
+          timestamp: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting admin ticket reply event:", err);
+    }
   } catch (error) {
     console.error("Error adding reply:", error);
     res.status(500).json({ message: "Server error" });
@@ -281,6 +355,25 @@ exports.closeTicket = async (req, res) => {
       message: "Ticket closed successfully",
       ticket,
     });
+    // Emit real-time notification to ticket owner and admins
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to(`user:${ticket.userId}`).emit("ticket:closed", {
+          ticketId: ticket._id,
+          reason: ticket.closureReason || "Closed by admin",
+          closedAt: ticket.closedAt || new Date(),
+        });
+
+        io.to("admin:all").emit("ticket:closedNotification", {
+          ticketId: ticket._id,
+          closureReason: ticket.closureReason || "Closed by admin",
+          timestamp: new Date(),
+        });
+      }
+    } catch (err) {
+      console.error("Error emitting ticket closed event:", err);
+    }
   } catch (error) {
     console.error("Error closing ticket:", error);
     res.status(500).json({ message: "Server error" });

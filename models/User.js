@@ -271,7 +271,11 @@ const userSchema = new mongoose.Schema(
       profileViewAlerts: { type: Boolean, default: true },
     },
     // ================= PAYMENT INFO =================
-
+    subscriptionFeatures: {
+      contactViews: { type: Number, default: 0 },
+      interestExpress: { type: Number, default: 0 },
+      imageUploads: { type: Number, default: 0 },
+    },
     paymentMethod: String,
 
     lastPaymentDate: Date,

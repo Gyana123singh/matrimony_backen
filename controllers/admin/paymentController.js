@@ -77,6 +77,26 @@ exports.markPaymentCompleted = async (req, res) => {
       return res.status(404).json({ message: "Payment not found" });
     }
 
+    // Emit real-time update
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("payment:updated", {
+          paymentId: payment._id,
+          status: payment.status,
+        });
+
+        if (payment.userId) {
+          io.to(`user:${payment.userId}`).emit("payment:status", {
+            paymentId: payment._id,
+            status: payment.status,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error emitting payment update:", err);
+    }
+
     res.status(200).json({
       message: "Payment marked as completed",
       payment,
@@ -102,6 +122,26 @@ exports.refundPayment = async (req, res) => {
 
     if (!payment) {
       return res.status(404).json({ message: "Payment not found" });
+    }
+
+    // Emit real-time update
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("payment:updated", {
+          paymentId: payment._id,
+          status: payment.status,
+        });
+
+        if (payment.userId) {
+          io.to(`user:${payment.userId}`).emit("payment:status", {
+            paymentId: payment._id,
+            status: payment.status,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error emitting payment refund event:", err);
     }
 
     res.status(200).json({

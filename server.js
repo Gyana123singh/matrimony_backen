@@ -18,75 +18,95 @@ const app = express();
 
 // ================== DATABASE ==================
 connectDB();
-seedAdmin();
 
-// ================== MIDDLEWARES ==================
+// ✅ Run seeder only in development
+if (process.env.NODE_ENV !== "production") {
+  seedAdmin();
+}
 
+// ================== ENV CHECK ==================
+const isProduction = process.env.NODE_ENV === "production";
+
+// ================== ALLOWED ORIGINS ==================
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "https://marathishubhavivah.com",
+];
+
+// ================== CORS ==================
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? "https://marathishubhavivah.com"
-        : [
-            "http://localhost:5174",
-            "http://localhost:5173",
-            "http://127.0.0.1:5174",
-            "http://127.0.0.1:5173",
-            "https://marathishubhavivah.com",
-          ],
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+  })
 );
 
+// ================== BODY PARSER ==================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ================== SESSION ==================
-
+// ================== SESSION (FINAL FIX) ==================
 app.use(
   session({
+    name: "connect.sid",
     secret: process.env.SESSION_SECRET || "matrimonial_captcha_secret",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // true only in https
+      secure: isProduction,               // ✅ dynamic
       httpOnly: true,
-      sameSite: "lax", // Allow same-site requests from different ports
-      maxAge: 5 * 60 * 1000, // 5 minutes
-      domain: undefined, // Let the browser handle the domain
+      sameSite: isProduction ? "none" : "lax", // ✅ dynamic fix
+      maxAge: 5 * 60 * 1000,
     },
-  }),
+  })
 );
 
 // ================== ROUTES ==================
-
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 
 // ================== HEALTH CHECK ==================
-
 app.get("/", (req, res) => {
   res.send("Matrimonial Backend Is Running");
 });
 
-// ================== SOCKET.IO SETUP ==================
-
+// ================== SOCKET.IO ==================
 const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: true,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by Socket.IO CORS"));
+      }
+    },
     credentials: true,
   },
   transports: ["websocket", "polling"],
 });
 
-// Initialize all socket events
+// Initialize socket events
 initializeSocketEvents(io);
 
-// ================== SERVER ==================
+// Make io accessible
+app.set("io", io);
 
+// ================== SERVER ==================
 const PORT = process.env.PORT || 5002;
 
 server.listen(PORT, () => {
