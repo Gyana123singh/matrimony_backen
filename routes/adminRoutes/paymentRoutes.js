@@ -11,6 +11,9 @@ const {
   updatePackage,
   deletePackage,
   getPaymentStats,
+  getActivePackages,
+  buyPackage,
+  getRenewals,
 } = require("../../controllers/admin/paymentController");
 
 const { protect } = require("../../middleware/auth.middleware");
@@ -32,5 +35,9 @@ router.post("/packages", createPackage);
 router.get("/packages", getAllPackages);
 router.put("/packages/:packageId", updatePackage);
 router.delete("/packages/:packageId", deletePackage);
+router.get("/packages/active", getActivePackages);
+router.post("/packages/buy", buyPackage);
+router.get("/packages/renewals", getRenewals);
+
 
 module.exports = router;

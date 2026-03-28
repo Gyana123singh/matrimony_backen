@@ -88,10 +88,6 @@ const userSchema = new mongoose.Schema(
 
     bloodGroup: String,
 
-    religion: String,
-
-    caste: String,
-
     maritalStatus: String,
 
     education: String,

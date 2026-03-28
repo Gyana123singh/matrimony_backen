@@ -197,6 +197,20 @@ exports.acceptInterest = async (req, res) => {
       relatedUserId: interest.receiverId,
     });
 
+    // Emit socket match event to notify sender in real-time
+    try {
+      const io = req.app.get('io')
+      if (io) {
+        io.to(`user:${interest.senderId}`).emit('match:created', {
+          matchedWith: interest.receiverId,
+          matchedWithName: (await User.findById(interest.receiverId))?.firstName,
+          interestId: interest._id,
+        })
+      }
+    } catch (err) {
+      console.error('Socket emit error (match:created):', err.message)
+    }
+
     res.status(200).json({
       success: true,
       interest,

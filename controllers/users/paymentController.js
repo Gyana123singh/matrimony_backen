@@ -2,7 +2,8 @@ const Payment = require("../../models/Payment");
 const Package = require("../../models/Package");
 const User = require("../../models/User");
 const Notification = require("../../models/Notification");
-
+const Stripe = require("stripe");
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 // Get available packages
 exports.getPackages = async (req, res) => {
   try {
@@ -21,42 +22,49 @@ exports.getPackages = async (req, res) => {
 };
 
 // Create payment intent
+
+
 exports.createPaymentIntent = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { packageId, paymentMethod } = req.body;
+    const { packageId } = req.body;
 
-    const package = await Package.findById(packageId);
+    const package = await Package.findOne({ name: packageId });
 
     if (!package) {
       return res.status(404).json({ message: "Package not found" });
     }
 
+    // 🔥 CREATE STRIPE PAYMENT INTENT
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: package.price * 100, // paise (₹)
+      currency: "inr",
+      metadata: {
+        userId: userId.toString(),
+        packageId: package._id.toString(),
+      },
+    });
+
+    // SAVE PAYMENT
     const payment = new Payment({
       userId,
       packageName: package.name,
       amount: package.price,
-      paymentMethod,
+      paymentMethod: "stripe",
       description: `Subscription to ${package.name}`,
       duration: package.duration,
       status: "initiated",
+      stripePaymentIntentId: paymentIntent.id,
     });
-
-    // If payment method is stripe, you would create a stripe payment intent here
-    if (paymentMethod === "stripe") {
-      // Stripe integration would go here
-      // payment.stripePaymentIntentId = paymentIntent.id;
-    }
 
     await payment.save();
 
     res.status(201).json({
-      message: "Payment intent created",
-      payment,
-      clientSecret: "client-secret-here", // Stripe secret here
+      clientSecret: paymentIntent.client_secret,
+      paymentId: payment._id,
     });
   } catch (error) {
-    console.error("Error creating payment:", error);
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -31,6 +31,29 @@ exports.sendMessage = async (req, res) => {
 
     await message.save();
 
+    // Emit socket events for real-time delivery
+    try {
+      const io = req.app.get('io')
+      if (io) {
+        io.to(`user:${receiverId}`).emit('message:receive', {
+          _id: message._id,
+          senderId,
+          receiverId,
+          content: message.content,
+          attachments: message.attachments,
+          timestamp: message.createdAt || new Date(),
+        })
+
+        // Notify sender about delivery confirmation
+        io.to(`user:${senderId}`).emit('message:delivered', {
+          messageId: message._id,
+          status: 'delivered',
+        })
+      }
+    } catch (err) {
+      console.error('Socket emit error:', err.message)
+    }
+
     res.status(201).json({
       message: "Message sent successfully",
       data: message,
@@ -65,11 +88,32 @@ exports.getMessages = async (req, res) => {
 
     const total = await Message.countDocuments(query);
 
-    // Mark messages as read
-    await Message.updateMany(
-      { receiverId: userId, senderId: otherUserId, isRead: false },
-      { $set: { isRead: true, readAt: new Date() } },
-    );
+
+    // Mark messages as read - find unread first so we can notify senders
+    const unreadMessages = await Message.find({ receiverId: userId, senderId: otherUserId, isRead: false })
+    const unreadIds = unreadMessages.map(m => m._id)
+
+    if (unreadIds.length > 0) {
+      await Message.updateMany(
+        { _id: { $in: unreadIds } },
+        { $set: { isRead: true, readAt: new Date() } },
+      )
+
+      // Emit read confirmations to sender via socket
+      try {
+        const io = req.app.get('io')
+        if (io) {
+          unreadIds.forEach(id => {
+            io.to(`user:${otherUserId}`).emit('message:read:confirmation', {
+              messageId: id,
+              readAt: new Date(),
+            })
+          })
+        }
+      } catch (err) {
+        console.error('Socket emit error (read confirmations):', err.message)
+      }
+    }
 
     res.status(200).json({
       message: "Messages retrieved successfully",
@@ -192,6 +236,18 @@ exports.deleteMessage = async (req, res) => {
 
     await Message.findByIdAndDelete(messageId);
 
+    // Emit deletion event to receiver
+    try {
+      const io = req.app.get('io')
+      if (io) {
+        io.to(`user:${message.receiverId}`).emit('message:deleted', {
+          messageId,
+        })
+      }
+    } catch (err) {
+      console.error('Socket emit error (delete):', err.message)
+    }
+
     res.status(200).json({
       message: "Message deleted successfully",
     });
@@ -215,6 +271,19 @@ exports.markAsRead = async (req, res) => {
       },
       { new: true },
     );
+
+    // Emit read confirmation to sender via socket
+    try {
+      const io = req.app.get('io')
+      if (io && message && message.senderId) {
+        io.to(`user:${message.senderId}`).emit('message:read:confirmation', {
+          messageId: message._id,
+          readAt: message.readAt || new Date(),
+        })
+      }
+    } catch (err) {
+      console.error('Socket emit error (markAsRead):', err.message)
+    }
 
     res.status(200).json({
       message: "Message marked as read",

@@ -157,8 +157,17 @@ exports.refundPayment = async (req, res) => {
 // Create package
 exports.createPackage = async (req, res) => {
   try {
-    const { name, description, price, duration, features, displayOrder } =
-      req.body;
+    const {
+      name,
+      price,
+      interestLimit,
+      interestExpress,   // NEW
+      profileLimit,
+      imageLimit,
+      contactView,       // NEW
+      validity,
+      description,       // NEW
+    } = req.body;
 
     // Check if package already exists
     const existingPackage = await Package.findOne({ name });
@@ -166,20 +175,23 @@ exports.createPackage = async (req, res) => {
       return res.status(400).json({ message: "Package already exists" });
     }
 
-    const package = new Package({
+    const newPackage = new Package({
       name,
-      description,
       price,
-      duration,
-      features,
-      displayOrder: displayOrder || 0,
+      interestLimit,
+      interestExpress,
+      profileLimit,
+      imageLimit,
+      contactView,
+      validity,
+      description,
     });
 
-    await package.save();
+    await newPackage.save();
 
     res.status(201).json({
       message: "Package created successfully",
-      package,
+      package: newPackage,
     });
   } catch (error) {
     console.error("Error creating package:", error);
@@ -302,6 +314,90 @@ exports.getPaymentStats = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching payment stats:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getActivePackages = async (req, res) => {
+  try {
+    const packages = await Package.find({ isActive: true }).sort({
+      displayOrder: 1,
+    });
+
+    res.status(200).json({
+      message: "Active packages",
+      packages,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.buyPackage = async (req, res) => {
+  try {
+    const { packageId } = req.body;
+    const userId = req.user._id;
+
+    const pkg = await Package.findById(packageId);
+    if (!pkg) {
+      return res.status(404).json({ message: "Package not found" });
+    }
+
+    // Create payment
+    const payment = await Payment.create({
+      userId,
+      amount: pkg.price,
+      packageName: pkg.name,
+      status: "pending",
+    });
+
+    res.status(200).json({
+      message: "Proceed to payment",
+      payment,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// Get renewal list (expiring packages)
+exports.getRenewals = async (req, res) => {
+  try {
+    const { startDate, endDate, search } = req.query;
+
+    const query = {
+      status: "success",
+    };
+
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    }
+
+    const payments = await Payment.find(query)
+      .populate("userId", "firstName lastName phone")
+      .sort({ createdAt: -1 });
+
+    const renewals = payments.map((p) => ({
+      id: p._id,
+      userName: `${p.userId?.firstName || ""} ${p.userId?.lastName || ""}`,
+      packageName: p.packageName,
+      startDate: p.createdAt,
+      endDate: new Date(
+        new Date(p.createdAt).setDate(
+          new Date(p.createdAt).getDate() + 30
+        )
+      ), // example validity
+      mobile: p.userId?.phone,
+    }));
+
+    res.status(200).json({
+      message: "Renewals fetched",
+      renewals,
+    });
+  } catch (error) {
+    console.error("Error fetching renewals:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -1,4 +1,5 @@
 const User = require("../../models/User");
+const sendEmail = require("../../util/sendEmail");
 
 // Get all users
 exports.getAllUsers = async (req, res) => {
@@ -75,6 +76,59 @@ exports.getUserDetails = async (req, res) => {
   }
 };
 
+// Update user details
+exports.updateUserDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      req.body,
+      { returnDocument: "after" }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "User updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.toggleVerification = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { field, value } = req.body;
+
+    const allowedFields = [
+      "isEmailVerified",
+      "isPhoneVerified",
+      "isKycVerified",
+    ];
+
+    if (!allowedFields.includes(field)) {
+      return res.status(400).json({ message: "Invalid field" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { [field]: value },
+      { returnDocument: "after" }
+    ).select("-password");
+
+    res.status(200).json({
+      message: `${field} updated`,
+      user,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 // Ban user
 exports.banUser = async (req, res) => {
   try {
@@ -89,15 +143,33 @@ exports.banUser = async (req, res) => {
         bannedAt: new Date(),
         isActive: false,
       },
-      { new: true },
+      { returnDocument: "after" }
     ).select("-password");
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // ✅ SEND EMAIL USING YOUR EXISTING FUNCTION
+    if (user.email) {
+      await sendEmail(
+        user.email,
+        "Your Account Has Been Banned",
+        `Hello ${user.firstName},
+
+Your account has been banned by admin.
+
+Reason: ${reason}
+
+If you believe this is a mistake, please contact support.
+
+Regards,
+Admin Team`
+      );
+    }
+
     res.status(200).json({
-      message: "User banned successfully",
+      message: "User banned & email sent",
       user,
     });
   } catch (error) {

@@ -4,7 +4,7 @@ const packageSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
+
       unique: true,
     },
 
@@ -12,9 +12,12 @@ const packageSchema = new mongoose.Schema(
 
     price: {
       type: Number,
-      required: true,
-    },
 
+    },
+    interestLimit: { type: Number, default: 0 },
+    profileLimit: { type: Number, default: 0 },
+    imageLimit: { type: Number, default: 0 },
+    validity: { type: Number, default: 0 },
     currency: {
       type: String,
       default: "USD",
@@ -22,15 +25,19 @@ const packageSchema = new mongoose.Schema(
 
     duration: {
       type: Number,
-      required: true, // in days
+      // in days
+    },
+    features: {
+      contactView: { type: Number, default: 0 },
+      interestExpress: { type: Number, default: 0 },
+      imageUpload: { type: Number, default: 0 },
     },
 
-    features: [
-      {
-        name: String,
-        value: mongoose.Schema.Types.Mixed,
-      },
-    ],
+    status: {
+      type: String,
+      enum: ["Active", "Disabled"],
+      default: "Active",
+    },
 
     isActive: {
       type: Boolean,

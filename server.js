@@ -11,7 +11,7 @@ const initializeSocketEvents = require("./socketEvents/index");
 
 // ================== ROUTES ==================
 const userRoutes = require("./routes/userRoutes/index");
-const adminRoutes = require("./routes/adminRoutes/adminRoutes");
+const adminRoutes = require("./routes/adminRoutes/index");
 const seedAdmin = require("./scripts/adminSeeder");
 
 const app = express();
