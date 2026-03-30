@@ -218,37 +218,20 @@ exports.getAllPackages = async (req, res) => {
 exports.updatePackage = async (req, res) => {
   try {
     const { packageId } = req.params;
-    const {
-      name,
-      description,
-      price,
-      duration,
-      features,
-      displayOrder,
-      isActive,
-    } = req.body;
 
-    const package = await Package.findByIdAndUpdate(
+    const updatedPackage = await Package.findByIdAndUpdate(
       packageId,
-      {
-        name,
-        description,
-        price,
-        duration,
-        features,
-        displayOrder,
-        isActive,
-      },
-      { new: true, runValidators: true },
+      { ...req.body },
+      { returnDocument: "after", runValidators: true }
     );
 
-    if (!package) {
+    if (!updatedPackage) {
       return res.status(404).json({ message: "Package not found" });
     }
 
     res.status(200).json({
       message: "Package updated successfully",
-      package,
+      package: updatedPackage,
     });
   } catch (error) {
     console.error("Error updating package:", error);
@@ -317,7 +300,31 @@ exports.getPaymentStats = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+// Toggle Package Status (Enable / Disable)
+exports.togglePackageStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const pkg = await Package.findById(id);
+
+    if (!pkg) {
+      return res.status(404).json({ message: "Package not found" });
+    }
+
+    // ✅ Toggle boolean
+    pkg.isActive = !pkg.isActive;
+
+    await pkg.save();
+
+    res.status(200).json({
+      message: `Package ${pkg.isActive ? "enabled" : "disabled"} successfully`,
+      package: pkg,
+    });
+  } catch (error) {
+    console.error("Error toggling package:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 exports.getActivePackages = async (req, res) => {
   try {
     const packages = await Package.find({ isActive: true }).sort({

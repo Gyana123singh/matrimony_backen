@@ -22,22 +22,29 @@ exports.getPackages = async (req, res) => {
 };
 
 // Create payment intent
-
-
 exports.createPaymentIntent = async (req, res) => {
   try {
     const userId = req.user._id;
     const { packageId } = req.body;
 
-    const package = await Package.findOne({ name: packageId });
+    const package = await Package.findById(packageId);
 
     if (!package) {
       return res.status(404).json({ message: "Package not found" });
     }
 
+    // ✅ FIX: Use duration OR validity
+    const duration = Number(package.duration || package.validity);
+
+    if (!duration || isNaN(duration)) {
+      return res.status(400).json({
+        message: "Invalid package duration/validity",
+      });
+    }
+
     // 🔥 CREATE STRIPE PAYMENT INTENT
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: package.price * 100, // paise (₹)
+      amount: package.price * 100,
       currency: "inr",
       metadata: {
         userId: userId.toString(),
@@ -45,14 +52,14 @@ exports.createPaymentIntent = async (req, res) => {
       },
     });
 
-    // SAVE PAYMENT
+    // ✅ SAVE PAYMENT
     const payment = new Payment({
       userId,
       packageName: package.name,
       amount: package.price,
       paymentMethod: "stripe",
       description: `Subscription to ${package.name}`,
-      duration: package.duration,
+      duration: duration, // ✅ FIXED
       status: "initiated",
       stripePaymentIntentId: paymentIntent.id,
     });
@@ -64,7 +71,7 @@ exports.createPaymentIntent = async (req, res) => {
       paymentId: payment._id,
     });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Create Payment Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -75,46 +82,92 @@ exports.confirmPayment = async (req, res) => {
     const userId = req.user._id;
     const { paymentId, transactionId } = req.body;
 
+    console.log("Confirm Payment:", { paymentId, transactionId });
+
+    if (!paymentId) {
+      return res.status(400).json({ message: "paymentId is missing" });
+    }
+
     const payment = await Payment.findById(paymentId);
 
     if (!payment) {
       return res.status(404).json({ message: "Payment not found" });
     }
 
-    if (payment.userId.toString() !== userId.toString()) {
-      return res.status(403).json({ message: "Unauthorized" });
+    const package = await Package.findOne({ name: payment.packageName });
+
+    if (!package) {
+      return res.status(404).json({ message: "Package not found" });
     }
 
+    // ✅ FIX: Safe duration handling
+    const duration = Number(package.duration || package.validity);
+
+    if (!duration || isNaN(duration)) {
+      return res.status(400).json({
+        message: "Invalid package duration/validity",
+      });
+    }
+
+    // ✅ Update payment
     payment.status = "success";
     payment.transactionId = transactionId;
-    payment.startDate = new Date();
-    payment.endDate = new Date(
-      Date.now() + payment.duration * 24 * 60 * 60 * 1000,
+
+    const startDate = new Date();
+    const endDate = new Date(
+      Date.now() + duration * 24 * 60 * 60 * 1000
     );
+
+    payment.startDate = startDate;
+    payment.endDate = endDate;
 
     await payment.save();
 
-    // Update user subscription
+    // ✅ Update user subscription
     const user = await User.findByIdAndUpdate(
       userId,
       {
-        subscriptionPlan: payment.packageName,
+        subscriptionPlan: package.name,
         subscriptionStatus: "active",
-        subscriptionStartDate: payment.startDate,
-        subscriptionEndDate: payment.endDate,
-        $inc: { totalSpent: payment.amount },
+        subscriptionStartDate: startDate,
+        subscriptionEndDate: endDate,
+        subscriptionFeatures: {
+          contactViews: package.features?.contactView || 0,
+          interestExpress: package.features?.interestExpress || 0,
+          imageUploads: package.features?.imageUpload || 0,
+        },
+        $inc: { totalSpent: package.price },
       },
-      { new: true },
+      { new: true }
     );
 
-    res.status(200).json({
-      message: "Payment confirmed successfully",
+    // ✅ Notification
+    await Notification.create({
+      userId,
+      title: "Subscription Activated 🎉",
+      message: `Your ${package.name} plan is now active`,
+      type: "promo",
+    });
+
+    // ✅ Socket
+    const io = req.app.get("io");
+    io.to(`user:${userId}`).emit("notification:new", {
+      title: "Subscription Activated 🎉",
+      message: `Your ${package.name} plan is active`,
+    });
+
+    return res.status(200).json({
+      message: "Payment successful",
       payment,
       user,
     });
+
   } catch (error) {
-    console.error("Error confirming payment:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Confirm Payment Error:", error);
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
 
@@ -209,76 +262,3 @@ exports.cancelSubscription = async (req, res) => {
   }
 };
 
-
-
-
-exports.confirmPayment = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { paymentId, transactionId } = req.body;
-
-    const payment = await Payment.findById(paymentId);
-    const package = await Package.findOne({ name: payment.packageName });
-
-    if (!payment || !package) {
-      return res.status(404).json({ message: "Invalid payment" });
-    }
-
-    payment.status = "success";
-    payment.transactionId = transactionId;
-
-    const startDate = new Date();
-    const endDate = new Date(
-      Date.now() + package.duration * 24 * 60 * 60 * 1000
-    );
-
-    payment.startDate = startDate;
-    payment.endDate = endDate;
-
-    await payment.save();
-
-    // ✅ UPDATE USER SUBSCRIPTION + FEATURES
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        subscriptionPlan: package.name,
-        subscriptionStatus: "active",
-        subscriptionStartDate: startDate,
-        subscriptionEndDate: endDate,
-
-        subscriptionFeatures: {
-          contactViews: package.contactViews,
-          interestExpress: package.interestExpress,
-          imageUploads: package.imageUploads,
-        },
-
-        $inc: { totalSpent: package.price },
-      },
-      { new: true }
-    );
-
-    // ✅ CREATE NOTIFICATION
-    await Notification.create({
-      userId,
-      title: "Subscription Activated 🎉",
-      message: `Your ${package.name} plan is now active`,
-      type: "promo",
-    });
-
-    // ✅ SOCKET REALTIME
-    const io = req.app.get("io");
-    io.to(`user:${userId}`).emit("notification:new", {
-      title: "Subscription Activated 🎉",
-      message: `Your ${package.name} plan is active`,
-    });
-
-    res.status(200).json({
-      message: "Payment successful",
-      payment,
-      user,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
-};

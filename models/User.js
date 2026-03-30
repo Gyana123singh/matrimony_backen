@@ -79,7 +79,12 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0, // 0-100 percentage
     },
-
+    likedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
     // ================= PERSONAL INFO =================
 
     height: String,

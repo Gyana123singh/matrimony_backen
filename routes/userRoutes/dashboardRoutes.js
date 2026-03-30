@@ -11,6 +11,7 @@ const {
   getVisitors,
   trackVisit,
   getUserProfile,
+  toggleLike
 } = require("../../controllers/users/dashboardController");
 
 const { protect } = require("../../middleware/auth.middleware");
@@ -25,5 +26,7 @@ router.get("/near-matches", getNearMatches);
 router.get("/active-users", getActiveUsers);
 router.get("/visitors", getVisitors);
 router.post("/visit/:profileId", trackVisit);
+router.post("/like/:profileId", toggleLike);
+
 
 module.exports = router;

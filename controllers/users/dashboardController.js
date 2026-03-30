@@ -170,9 +170,17 @@ exports.getVisitors = async (req, res) => {
     const visitors = await User.find({
       _id: { $in: visitorIds },
       role: { $ne: "admin" },
-    }).select("firstName lastName profilePhoto");
+    }).select("firstName lastName profilePhoto job");
 
-    res.json(visitors);
+    // 🔥 ADD THIS PART (IMPORTANT)
+    const formatted = visitors.map((v) => ({
+      ...v.toObject(),
+      isLiked: user.likedUsers?.some(
+        (id) => id.toString() === v._id.toString()
+      ),
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ message: "Visitors fetch error" });
   }
@@ -200,5 +208,40 @@ exports.trackVisit = async (req, res) => {
     res.json({ message: "Visit tracked" });
   } catch (error) {
     res.status(500).json({ message: "Visit tracking error" });
+  }
+};
+
+// ================= LIKE PROFILE =================
+exports.toggleLike = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { profileId } = req.params;
+
+    if (!profileId) {
+      return res.status(400).json({ message: "Profile ID required" });
+    }
+
+    const user = await User.findById(userId);
+
+    const alreadyLiked = user.likedUsers?.includes(profileId);
+
+    if (alreadyLiked) {
+      // ❌ REMOVE LIKE
+      user.likedUsers = user.likedUsers.filter(
+        (id) => id.toString() !== profileId
+      );
+    } else {
+      // ✅ ADD LIKE
+      user.likedUsers.push(profileId);
+    }
+
+    await user.save();
+
+    res.json({
+      message: alreadyLiked ? "Like removed" : "Profile liked",
+      liked: !alreadyLiked,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Like error" });
   }
 };
