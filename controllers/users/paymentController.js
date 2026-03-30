@@ -21,7 +21,10 @@ exports.getPackages = async (req, res) => {
   }
 };
 
-// Create payment intent
+
+// ===============================
+// CREATE PAYMENT INTENT
+// ===============================
 exports.createPaymentIntent = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -33,7 +36,7 @@ exports.createPaymentIntent = async (req, res) => {
       return res.status(404).json({ message: "Package not found" });
     }
 
-    // ✅ FIX: Use duration OR validity
+    // ✅ Duration safe handling
     const duration = Number(package.duration || package.validity);
 
     if (!duration || isNaN(duration)) {
@@ -49,40 +52,53 @@ exports.createPaymentIntent = async (req, res) => {
       metadata: {
         userId: userId.toString(),
         packageId: package._id.toString(),
+        planName: package.name,
       },
     });
 
-    // ✅ SAVE PAYMENT
+    // ✅ SAVE PAYMENT WITH FULL SNAPSHOT
     const payment = new Payment({
       userId,
+      packageId: package._id,
       packageName: package.name,
       amount: package.price,
       paymentMethod: "stripe",
       description: `Subscription to ${package.name}`,
-      duration: duration, // ✅ FIXED
+      duration: duration,
       status: "initiated",
       stripePaymentIntentId: paymentIntent.id,
+
+      // 🔥 SAVE FEATURES
+      features: {
+        contactViews: package.features?.contactView || 0,
+        interestExpress: package.features?.interestExpress || 0,
+        imageUploads: package.features?.imageUpload || 0,
+      },
+
+      // 🔥 SAVE BENEFITS
+      benefits: package.benefits || [],
     });
 
     await payment.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       clientSecret: paymentIntent.client_secret,
       paymentId: payment._id,
     });
+
   } catch (error) {
     console.error("❌ Create Payment Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Confirm payment
+// ===============================
+// CONFIRM PAYMENT
+// ===============================
 exports.confirmPayment = async (req, res) => {
   try {
     const userId = req.user._id;
     const { paymentId, transactionId } = req.body;
-
-    console.log("Confirm Payment:", { paymentId, transactionId });
 
     if (!paymentId) {
       return res.status(400).json({ message: "paymentId is missing" });
@@ -94,19 +110,9 @@ exports.confirmPayment = async (req, res) => {
       return res.status(404).json({ message: "Payment not found" });
     }
 
-    const package = await Package.findOne({ name: payment.packageName });
-
-    if (!package) {
-      return res.status(404).json({ message: "Package not found" });
-    }
-
-    // ✅ FIX: Safe duration handling
-    const duration = Number(package.duration || package.validity);
-
-    if (!duration || isNaN(duration)) {
-      return res.status(400).json({
-        message: "Invalid package duration/validity",
-      });
+    // ✅ Prevent duplicate confirmation
+    if (payment.status === "success") {
+      return res.status(400).json({ message: "Payment already confirmed" });
     }
 
     // ✅ Update payment
@@ -115,7 +121,7 @@ exports.confirmPayment = async (req, res) => {
 
     const startDate = new Date();
     const endDate = new Date(
-      Date.now() + duration * 24 * 60 * 60 * 1000
+      Date.now() + payment.duration * 24 * 60 * 60 * 1000
     );
 
     payment.startDate = startDate;
@@ -123,37 +129,37 @@ exports.confirmPayment = async (req, res) => {
 
     await payment.save();
 
-    // ✅ Update user subscription
+    // ✅ UPDATE USER USING PAYMENT SNAPSHOT
     const user = await User.findByIdAndUpdate(
       userId,
       {
-        subscriptionPlan: package.name,
+        subscriptionPlan: payment.packageName,
         subscriptionStatus: "active",
         subscriptionStartDate: startDate,
         subscriptionEndDate: endDate,
-        subscriptionFeatures: {
-          contactViews: package.features?.contactView || 0,
-          interestExpress: package.features?.interestExpress || 0,
-          imageUploads: package.features?.imageUpload || 0,
-        },
-        $inc: { totalSpent: package.price },
+
+        // 🔥 USE SAVED FEATURES
+        subscriptionFeatures: payment.features,
+        subscriptionBenefits: payment.benefits,
+
+        $inc: { totalSpent: payment.amount },
       },
       { new: true }
     );
 
-    // ✅ Notification
+    // ✅ CREATE NOTIFICATION
     await Notification.create({
       userId,
       title: "Subscription Activated 🎉",
-      message: `Your ${package.name} plan is now active`,
+      message: `Your ${payment.packageName} plan is now active`,
       type: "promo",
     });
 
-    // ✅ Socket
+    // ✅ SOCKET EMIT
     const io = req.app.get("io");
     io.to(`user:${userId}`).emit("notification:new", {
       title: "Subscription Activated 🎉",
-      message: `Your ${package.name} plan is active`,
+      message: `Your ${payment.packageName} plan is active`,
     });
 
     return res.status(200).json({
@@ -171,7 +177,10 @@ exports.confirmPayment = async (req, res) => {
   }
 };
 
-// Get payment history
+
+// ===============================
+// PAYMENT HISTORY
+// ===============================
 exports.getPaymentHistory = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -201,20 +210,22 @@ exports.getPaymentHistory = async (req, res) => {
   }
 };
 
-// Get current subscription
+// ===============================
+// CURRENT SUBSCRIPTION
+// ===============================
 exports.getCurrentSubscription = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const user = await User.findById(userId).select(
-      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate",
+      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate"
     );
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Check if subscription expired
+    // Auto-expire
     if (
       user.subscriptionStatus === "active" &&
       new Date() > user.subscriptionEndDate
@@ -238,7 +249,9 @@ exports.getCurrentSubscription = async (req, res) => {
   }
 };
 
-// Cancel subscription
+// ===============================
+// CANCEL SUBSCRIPTION
+// ===============================
 exports.cancelSubscription = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -249,7 +262,7 @@ exports.cancelSubscription = async (req, res) => {
         subscriptionStatus: "inactive",
         subscriptionPlan: null,
       },
-      { new: true },
+      { new: true }
     );
 
     res.status(200).json({

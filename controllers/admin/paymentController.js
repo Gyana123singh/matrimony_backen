@@ -167,6 +167,7 @@ exports.createPackage = async (req, res) => {
       contactView,       // NEW
       validity,
       description,       // NEW
+      benefits,
     } = req.body;
 
     // Check if package already exists
@@ -185,6 +186,7 @@ exports.createPackage = async (req, res) => {
       contactView,
       validity,
       description,
+      benefits,
     });
 
     await newPackage.save();

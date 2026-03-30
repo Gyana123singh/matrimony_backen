@@ -8,6 +8,12 @@ const paymentSchema = new mongoose.Schema(
       required: true,
     },
 
+    // 🔥 ADD THIS (IMPORTANT)
+    packageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Package",
+    },
+
     packageName: {
       type: String,
       required: true,
@@ -20,7 +26,7 @@ const paymentSchema = new mongoose.Schema(
 
     currency: {
       type: String,
-      default: "USD",
+      default: "INR",
     },
 
     status: {
@@ -41,15 +47,27 @@ const paymentSchema = new mongoose.Schema(
 
     description: String,
 
-    duration: Number, // in days
+    duration: Number,
 
     startDate: Date,
 
     endDate: Date,
 
     metadata: mongoose.Schema.Types.Mixed,
+
+    // ============================
+    // 🔥 ADD THIS SECTION (MAIN FIX)
+    // ============================
+
+    features: {
+      contactViews: { type: Number, default: 0 },
+      interestExpress: { type: Number, default: 0 },
+      imageUploads: { type: Number, default: 0 },
+    },
+
+    benefits: [{ type: String }],
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Payment", paymentSchema);

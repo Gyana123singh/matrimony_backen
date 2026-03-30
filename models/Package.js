@@ -18,9 +18,13 @@ const packageSchema = new mongoose.Schema(
     profileLimit: { type: Number, default: 0 },
     imageLimit: { type: Number, default: 0 },
     validity: { type: Number, default: 0 },
+    benefits: {
+      type: [String],
+      default: [],
+    },
     currency: {
       type: String,
-      default: "USD",
+      default: "INR",
     },
 
     duration: {
