@@ -29,6 +29,16 @@ exports.sendMessage = async (req, res) => {
       attachments: attachments || [],
     });
 
+    // If files were uploaded via multer (Cloudinary storage), map their URLs
+    if (req.files && req.files.length > 0) {
+      try {
+        const fileUrls = req.files.map((f) => f.path || f.secure_url || f.url || f.filename);
+        message.attachments = (message.attachments || []).concat(fileUrls || []);
+      } catch (e) {
+        console.error('Error mapping uploaded files:', e.message);
+      }
+    }
+
     await message.save();
 
     // Emit socket events for real-time delivery
@@ -43,11 +53,22 @@ exports.sendMessage = async (req, res) => {
           attachments: message.attachments,
           timestamp: message.createdAt || new Date(),
         })
+        // Also emit the same receive event to the sender so sender UI can
+        // render the persisted message (helps when optimistic UI didn't match)
+        io.to(`user:${senderId}`).emit('message:receive', {
+          _id: message._id,
+          senderId,
+          receiverId,
+          content: message.content,
+          attachments: message.attachments,
+          timestamp: message.createdAt || new Date(),
+        })
 
         // Notify sender about delivery confirmation
         io.to(`user:${senderId}`).emit('message:delivered', {
           messageId: message._id,
           status: 'delivered',
+          content: message.content,
         })
       }
     } catch (err) {
@@ -292,5 +313,52 @@ exports.markAsRead = async (req, res) => {
   } catch (error) {
     console.error("Error marking message:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Edit message content
+exports.editMessage = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { messageId } = req.params;
+    const { content } = req.body;
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+    if (String(message.senderId) !== String(userId)) {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    message.content = content || message.content;
+    message.edited = true;
+    message.editedAt = new Date();
+
+    await message.save();
+
+    // Emit update event to both participants
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          messageId: message._id,
+          content: message.content,
+          edited: message.edited,
+          editedAt: message.editedAt,
+          senderId: message.senderId,
+          receiverId: message.receiverId,
+          timestamp: message.createdAt || new Date(),
+        };
+
+        io.to(`user:${message.receiverId}`).emit('message:updated', payload);
+        io.to(`user:${message.senderId}`).emit('message:updated', payload);
+      }
+    } catch (err) {
+      console.error('Socket emit error (edit):', err.message);
+    }
+
+    res.status(200).json({ message: 'Message updated', data: message });
+  } catch (error) {
+    console.error('Error editing message:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
