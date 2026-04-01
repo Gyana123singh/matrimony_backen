@@ -25,60 +25,89 @@ exports.getUserProfile = async (req, res) => {
 // Update user profile
 exports.updateUserProfile = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const {
-      firstName,
-      lastName,
-      phone,
-      about,
-      gender,
-      dateOfBirth,
-      height,
-      complexion,
-      bloodGroup,
-      religion,
-      caste,
-      maritalStatus,
-      education,
-      job,
-      jobLocation,
-      annualIncome,
-      hobbies,
-      profilePhoto,
-    } = req.body;
+    const userId = req.user.id;
 
-    const user = await User.findByIdAndUpdate(
+    const bodyKeys = Object.keys(req.body);
+
+    let updates = {};
+
+    // =========================
+    // ✅ CASE 1: ONLY PHOTO UPDATE
+    // =========================
+    if (bodyKeys.length === 1 && bodyKeys.includes("profilePhoto")) {
+      updates.profilePhoto = req.body.profilePhoto;
+    }
+
+    // =========================
+    // ✅ CASE 2: NORMAL PROFILE UPDATE
+    // =========================
+    else {
+      const allowedFields = [
+        "firstName",
+        "lastName",
+        "email",
+        "gender",
+        "religion",
+        "caste",
+        "dateOfBirth",
+        "birthTime",
+        "birthName",
+        "height",
+        "complexion",
+        "bloodGroup",
+        "education",
+        "fieldOfStudy",
+        "job",
+        "jobLocation",
+        "annualIncome",
+        "fatherName",
+        "fatherJob",
+        "motherName",
+        "motherJob",
+        "siblings",
+        "paternalUncleName",
+        "paternalUncleJob",
+        "maternalUncleName",
+        "maternalUncleJob",
+        "about"
+      ];
+
+      bodyKeys.forEach((key) => {
+        if (allowedFields.includes(key)) {
+          updates[key] = req.body[key];
+        }
+      });
+    }
+
+    // =========================
+    // ❌ BLOCK EMPTY UPDATE
+    // =========================
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields to update",
+      });
+    }
+
+    // =========================
+    // ✅ UPDATE DB
+    // =========================
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
-      {
-        firstName,
-        lastName,
-        phone,
-        about,
-        gender,
-        dateOfBirth,
-        height,
-        complexion,
-        bloodGroup,
-        religion,
-        caste,
-        maritalStatus,
-        education,
-        job,
-        jobLocation,
-        annualIncome,
-        hobbies,
-        profilePhoto,
-      },
-      { new: true, runValidators: true },
-    ).select("-password");
+      { $set: updates },
+      { new: true }
+    );
 
     res.status(200).json({
-      message: "Profile updated successfully",
-      user,
+      success: true,
+      user: updatedUser,
     });
   } catch (error) {
-    console.error("Error updating profile:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Profile update failed",
+    });
   }
 };
 
