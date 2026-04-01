@@ -7,7 +7,7 @@ exports.createStory = async (req, res) => {
     const { brideName, groomName, description } = req.body;
 
     if (!req.file) {
-      return res.status(400).json({ message: "Image required" });
+      return res.status(400).json({ message: "Images required" });
     }
 
     // Upload to cloudinary
