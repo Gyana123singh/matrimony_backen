@@ -2,8 +2,23 @@ const Payment = require("../../models/Payment");
 const Package = require("../../models/Package");
 const User = require("../../models/User");
 const Notification = require("../../models/Notification");
-const Stripe = require("stripe");
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const crypto = require("crypto");
+
+/**
+ * Encrypt parameters for CCAvenue using AES-128-CBC.
+ * Returns a base64-encoded encrypted string suitable for the `encRequest` field.
+ */
+function encryptCCAvenue(plainText, workingKey) {
+  const algorithm = "aes-128-cbc";
+  // CCAvenue expects a 16 byte IV. Use zero IV for compatibility with many examples.
+  const iv = Buffer.alloc(16, 0);
+  const key = Buffer.from(workingKey, "utf8").slice(0, 16);
+
+  const cipher = crypto.createCipheriv(algorithm, key, iv);
+  let encrypted = cipher.update(plainText, "utf8", "base64");
+  encrypted += cipher.final("base64");
+  return encrypted;
+}
 // Get available packages
 exports.getPackages = async (req, res) => {
   try {
@@ -45,28 +60,25 @@ exports.createPaymentIntent = async (req, res) => {
       });
     }
 
-    // 🔥 CREATE STRIPE PAYMENT INTENT
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: package.price * 100,
-      currency: "inr",
-      metadata: {
-        userId: userId.toString(),
-        packageId: package._id.toString(),
-        planName: package.name,
-      },
-    });
+    // 🔥 CREATE CCAvenue REQUEST
+    // Build order parameters required by CCAvenue and encrypt them using the working key.
+    const merchant_id = process.env.CCAVENUE_MERCHANT_ID;
+    const access_code = process.env.CCAVENUE_ACCESS_CODE;
+    const working_key = process.env.CCAVENUE_WORKING_KEY; // used for encryption
+    const redirect_url = process.env.CCAVENUE_REDIRECT_URL;
+    const cancel_url = process.env.CCAVENUE_CANCEL_URL;
 
-    // ✅ SAVE PAYMENT WITH FULL SNAPSHOT
+    // create payment document first to generate an order id
     const payment = new Payment({
       userId,
       packageId: package._id,
       packageName: package.name,
       amount: package.price,
-      paymentMethod: "stripe",
+      paymentMethod: "ccavenue",
       description: `Subscription to ${package.name}`,
       duration: duration,
       status: "initiated",
-      stripePaymentIntentId: paymentIntent.id,
+      // We'll store the CCAvenue order id after saving the payment (orderId uses payment._id)
 
       // 🔥 SAVE FEATURES
       features: {
@@ -81,9 +93,40 @@ exports.createPaymentIntent = async (req, res) => {
 
     await payment.save();
 
+    // Create an order id for CCAvenue (use payment id with prefix)
+    const order_id = `order_${payment._id}`;
+    payment.ccavenueOrderId = order_id;
+    await payment.save();
+
+    // Build parameter string for CCAvenue
+    const params = [];
+    params.push(`merchant_id=${merchant_id}`);
+    params.push(`order_id=${order_id}`);
+    params.push(`amount=${package.price}`);
+    params.push(`currency=INR`);
+    if (redirect_url) params.push(`redirect_url=${redirect_url}`);
+    if (cancel_url) params.push(`cancel_url=${cancel_url}`);
+    params.push(`language=EN`);
+
+    // Optional: attach user metadata so we can reconcile on return
+    params.push(`merchant_param1=${userId}`);
+    params.push(`merchant_param2=${package._id}`);
+    params.push(`merchant_param3=${package.name}`);
+
+    const paramString = params.join("&");
+
+    // Encrypt using working key
+    const encRequest = encryptCCAvenue(paramString, working_key || "");
+
     return res.status(201).json({
-      clientSecret: paymentIntent.client_secret,
       paymentId: payment._id,
+      ccavenue: {
+        merchant_id,
+        access_code,
+        order_id,
+        amount: package.price,
+        encRequest,
+      },
     });
 
   } catch (error) {

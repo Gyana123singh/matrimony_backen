@@ -98,6 +98,53 @@ exports.updateUserProfile = async (req, res) => {
       { new: true }
     );
 
+    // Recompute profile completion after update
+    const computeProfileCompleted = (u) => {
+      const fields = [
+        "firstName",
+        "lastName",
+        "email",
+        "profilePhoto",
+        "gender",
+        "dateOfBirth",
+        "birthTime",
+        "birthName",
+        "height",
+        "complexion",
+        "bloodGroup",
+        "education",
+        "fieldOfStudy",
+        "job",
+        "jobLocation",
+        "annualIncome",
+        "religion",
+        "caste",
+        "fatherName",
+        "motherName",
+        "siblings",
+      ];
+
+      let filled = 0;
+      fields.forEach((f) => {
+        const v = u[f];
+        if (v !== undefined && v !== null && String(v).trim() !== "") {
+          filled += 1;
+        }
+      });
+
+      return Math.round((filled / fields.length) * 100);
+    };
+
+    try {
+      const newCompletion = computeProfileCompleted(updatedUser.toObject());
+      if (updatedUser.profileCompleted !== newCompletion) {
+        updatedUser.profileCompleted = newCompletion;
+        await updatedUser.save();
+      }
+    } catch (e) {
+      console.error("Failed to recompute profile completion", e);
+    }
+
     res.status(200).json({
       success: true,
       user: updatedUser,

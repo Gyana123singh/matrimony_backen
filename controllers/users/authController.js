@@ -90,6 +90,45 @@ exports.registerUser = async (req, res) => {
       maternalUncleJob,
     });
 
+    // Compute profile completion percentage
+    const computeProfileCompleted = (u) => {
+      const fields = [
+        "firstName",
+        "lastName",
+        "email",
+        "profilePhoto",
+        "gender",
+        "dateOfBirth",
+        "birthTime",
+        "birthName",
+        "height",
+        "complexion",
+        "bloodGroup",
+        "education",
+        "fieldOfStudy",
+        "job",
+        "jobLocation",
+        "annualIncome",
+        "religion",
+        "caste",
+        "fatherName",
+        "motherName",
+        "siblings",
+      ];
+
+      let filled = 0;
+      fields.forEach((f) => {
+        const v = u[f];
+        if (v !== undefined && v !== null && String(v).trim() !== "") {
+          filled += 1;
+        }
+      });
+
+      return Math.round((filled / fields.length) * 100);
+    };
+
+    user.profileCompleted = computeProfileCompleted(user);
+
     await user.save();
 
     res.status(201).json({
