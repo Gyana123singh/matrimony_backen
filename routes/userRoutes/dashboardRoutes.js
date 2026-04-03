@@ -13,10 +13,12 @@ const {
   getUserProfile,
   toggleLike
 } = require("../../controllers/users/dashboardController");
+const { updateLastSeen } = require("../../middleware/updateLastSeen");
 
 const { protect } = require("../../middleware/auth.middleware");
 
 router.use(protect);
+// router.use(updateLastSeen);
 router.get("/get-profile", getUserProfile);
 router.get("/stats", getDashboardStats);
 router.get("/recommended", getRecommendedProfiles);

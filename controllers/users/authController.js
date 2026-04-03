@@ -4,6 +4,22 @@ const svgCaptcha = require("svg-captcha");
 const jwt = require("jsonwebtoken");
 const sendSMS = require("../../util/sendSMS");
 
+// ✅ HELPER FUNCTION (AGE CALCULATION)
+const calculateAge = (dob) => {
+  const birthDate = new Date(dob);
+  const today = new Date();
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+
+  return age;
+};
+
+// ================= REGISTER USER =================
 exports.registerUser = async (req, res) => {
   try {
     const {
@@ -23,11 +39,8 @@ exports.registerUser = async (req, res) => {
       job,
       jobLocation,
       annualIncome,
-
-      // ✅ NEW FIELDS
       religion,
       caste,
-
       fatherName,
       fatherJob,
       motherName,
@@ -37,22 +50,53 @@ exports.registerUser = async (req, res) => {
       paternalUncleJob,
       maternalUncleName,
       maternalUncleJob,
+      state,
+      city,
+      presentAddress,
+      languages,
+      smoking,
+      drinking,
     } = req.body;
+    const { maritalStatus } = req.body;
 
+    // ✅ DOB REQUIRED CHECK
+    if (!dateOfBirth) {
+      return res.status(400).json({
+        message: "Date of birth is required",
+      });
+    }
+
+    // ✅ AGE VALIDATION (BLOCK <18)
+    const age = calculateAge(dateOfBirth);
+    if (age < 18) {
+      return res.status(400).json({
+        message: "You must be at least 18 years old to register",
+      });
+    }
+
+    // ✅ CHECK EXISTING USER
     const existingUser = await User.findOne({ email });
-
     if (existingUser) {
       return res.status(400).json({
         message: "Email already registered",
       });
     }
 
+    // ✅ HASH PASSWORD
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Get uploaded image URL from cloudinary
+    // ✅ CLOUDINARY IMAGE
     let imageUrl = "";
     if (req.file) {
-      imageUrl = req.file.path; // Cloudinary URL
+      imageUrl = req.file.path;
+    }
+
+    // Normalize languages: allow comma-separated string
+    let languagesArr = [];
+    if (languages) {
+      if (Array.isArray(languages)) languagesArr = languages;
+      else if (typeof languages === "string")
+        languagesArr = languages.split(",").map((s) => s.trim()).filter(Boolean);
     }
 
     const user = new User({
@@ -72,13 +116,9 @@ exports.registerUser = async (req, res) => {
       job,
       jobLocation,
       annualIncome,
-
-      // ✅ NEW FIELDS
       religion,
       caste,
-
       profilePhoto: imageUrl,
-
       fatherName,
       fatherJob,
       motherName,
@@ -88,9 +128,16 @@ exports.registerUser = async (req, res) => {
       paternalUncleJob,
       maternalUncleName,
       maternalUncleJob,
+      maritalStatus,
+      state,
+      city,
+      presentAddress,
+      languages: languagesArr,
+      smoking,
+      drinking,
     });
 
-    // Compute profile completion percentage
+    // ✅ PROFILE COMPLETION LOGIC
     const computeProfileCompleted = (u) => {
       const fields = [
         "firstName",
@@ -108,18 +155,30 @@ exports.registerUser = async (req, res) => {
         "fieldOfStudy",
         "job",
         "jobLocation",
+        "state",
+        "city",
         "annualIncome",
         "religion",
         "caste",
         "fatherName",
         "motherName",
         "siblings",
+        "about",
+        "hobbies",
+        "presentAddress",
+        "languages",
+        "smoking",
+        "drinking",
+        "phone",
+        "lifestyle",
       ];
 
       let filled = 0;
       fields.forEach((f) => {
         const v = u[f];
-        if (v !== undefined && v !== null && String(v).trim() !== "") {
+        if (f === "languages") {
+          if (Array.isArray(v) && v.length > 0) filled += 1;
+        } else if (v !== undefined && v !== null && String(v).trim() !== "") {
           filled += 1;
         }
       });
@@ -137,20 +196,18 @@ exports.registerUser = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
     res.status(500).json({
       message: "Server error",
     });
   }
 };
 
-// user login
+// ================= LOGIN USER =================
 exports.loginUser = async (req, res) => {
   try {
     const { emailOrPhone, password, captcha } = req.body;
 
-    // ================= CAPTCHA CHECK =================
-
+    // ================= CAPTCHA =================
     if (!req.session || !req.session.captcha) {
       return res.status(400).json({
         message: "Captcha expired. Please refresh.",
@@ -166,11 +223,9 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // clear captcha after verification
     delete req.session.captcha;
 
     // ================= FIND USER =================
-
     const user = await User.findOne({
       $or: [{ email: emailOrPhone }, { phone: emailOrPhone }],
     });
@@ -181,8 +236,15 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ================= CHECK ACCOUNT STATUS =================
+    // ================= AGE CHECK =================
+    const age = calculateAge(user.dateOfBirth);
+    if (age < 18) {
+      return res.status(403).json({
+        message: "You must be at least 18 years old to access this platform",
+      });
+    }
 
+    // ================= ACCOUNT STATUS =================
     if (!user.isActive) {
       return res.status(403).json({
         message: "Account is disabled",
@@ -190,7 +252,6 @@ exports.loginUser = async (req, res) => {
     }
 
     // ================= PASSWORD CHECK =================
-
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -199,18 +260,23 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ================= CREATE TOKEN =================
+    // ✅ ================= SET ONLINE =================
+    user.isOnline = true;
+    user.lastSeen = new Date();
+    user.lastLogin = new Date();
 
+    await user.save();
+
+    // ================= TOKEN =================
     const token = jwt.sign(
       {
         id: user._id,
         role: user.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "7d" }
     );
 
-    // remove password from response
     const userData = user.toObject();
     delete userData.password;
 
@@ -375,5 +441,22 @@ exports.verifyOTP = async (req, res) => {
     return res.status(500).json({
       message: "OTP verification failed",
     });
+  }
+};
+// ================= LOGOUT USER =================
+exports.logoutUser = async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      isOnline: false,
+      lastSeen: new Date(),
+    });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Logout error" });
   }
 };

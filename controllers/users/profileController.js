@@ -12,9 +12,54 @@ exports.getUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // compute missing fields for clarity
+    const fieldsToCheck = [
+      "firstName",
+      "lastName",
+      "email",
+      "profilePhoto",
+      "gender",
+      "dateOfBirth",
+      "birthTime",
+      "birthName",
+      "height",
+      "complexion",
+      "bloodGroup",
+      "education",
+      "fieldOfStudy",
+      "job",
+      "jobLocation",
+      "state",
+      "city",
+      "annualIncome",
+      "religion",
+      "caste",
+      "fatherName",
+      "motherName",
+      "siblings",
+      "about",
+      "hobbies",
+      "presentAddress",
+      "languages",
+      "smoking",
+      "drinking",
+      "phone",
+      "lifestyle",
+    ];
+
+    const missingFields = [];
+    const uObj = user.toObject();
+    fieldsToCheck.forEach((f) => {
+      const v = uObj[f];
+      if (v === undefined || v === null || String(v).trim() === "") {
+        missingFields.push(f);
+      }
+    });
+
     res.status(200).json({
       message: "Profile retrieved successfully",
       user,
+      missingFields,
     });
   } catch (error) {
     console.error("Error fetching profile:", error);
@@ -59,6 +104,8 @@ exports.updateUserProfile = async (req, res) => {
         "fieldOfStudy",
         "job",
         "jobLocation",
+        "state",
+        "city",
         "annualIncome",
         "fatherName",
         "fatherJob",
@@ -69,7 +116,23 @@ exports.updateUserProfile = async (req, res) => {
         "paternalUncleJob",
         "maternalUncleName",
         "maternalUncleJob",
-        "about"
+        "about",
+        "hobbies",
+        "presentAddress",
+        "languages",
+        "smoking",
+        "drinking",
+        "lifestyle",
+        "phone",
+        // Partner preferences
+        "preferredGender",
+        "preferredMinAge",
+        "preferredMaxAge",
+        "preferredHeight",
+        "preferredEducation",
+        "preferredReligion",
+        "preferredCaste",
+        "preferredMaritalStatus",
       ];
 
       bodyKeys.forEach((key) => {
@@ -92,6 +155,14 @@ exports.updateUserProfile = async (req, res) => {
     // =========================
     // ✅ UPDATE DB
     // =========================
+    // If languages provided as comma-separated string, convert to array
+    if (updates.languages && typeof updates.languages === "string") {
+      updates.languages = updates.languages
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: updates },
@@ -100,6 +171,9 @@ exports.updateUserProfile = async (req, res) => {
 
     // Recompute profile completion after update
     const computeProfileCompleted = (u) => {
+      // Note: `contactDisplay` was removed from UI and should not be
+      // considered in completion calculation. Birth time/name may be
+      // optional for many users but are still counted here if provided.
       const fields = [
         "firstName",
         "lastName",
@@ -116,12 +190,22 @@ exports.updateUserProfile = async (req, res) => {
         "fieldOfStudy",
         "job",
         "jobLocation",
+        "state",
+        "city",
         "annualIncome",
         "religion",
         "caste",
         "fatherName",
         "motherName",
         "siblings",
+        "about",
+        "hobbies",
+        "presentAddress",
+        "languages",
+        "smoking",
+        "drinking",
+        "phone",
+        "lifestyle",
       ];
 
       let filled = 0;

@@ -86,14 +86,27 @@ const userSchema = new mongoose.Schema(
       },
     ],
     // ================= PERSONAL INFO =================
+    maritalStatus: {
+      type: String,
+      enum: ["single", "divorced", "widowed"],
+      default: "single",
+    },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
 
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
     height: String,
 
     complexion: String,
 
     bloodGroup: String,
 
-    maritalStatus: String,
+    // maritalStatus already defined earlier with enum; remove duplicate
 
     education: String,
 
@@ -101,11 +114,30 @@ const userSchema = new mongoose.Schema(
 
     jobLocation: String,
 
+    // Personal location
+    state: String,
+    city: String,
+
     annualIncome: String,
 
     about: String,
 
     hobbies: [String],
+
+    // Lifestyle and contact display
+    lifestyle: String,
+    contactDisplay: String, // e.g., 'public', 'onlyPremium', 'private'
+    // Additional personal details
+    presentAddress: String,
+    languages: [String],
+    smoking: {
+      type: String,
+      enum: ["non-smoker", "occasional", "smoker"],
+    },
+    drinking: {
+      type: String,
+      enum: ["non-drinker", "occasional", "drinker"],
+    },
 
     // ================= FAMILY INFO =================
 

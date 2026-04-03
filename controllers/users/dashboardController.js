@@ -42,37 +42,169 @@ exports.getDashboardStats = async (req, res) => {
 // ================= RECOMMENDED =================
 exports.getRecommendedProfiles = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).lean();
 
-    // ✅ opposite gender logic
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // ================= AGE FUNCTION =================
+    const calculateAge = (dob) => {
+      if (!dob) return null;
+
+      const birthDate = new Date(dob);
+      const today = new Date();
+
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+
+      return age;
+    };
+
+    const userAge = calculateAge(user.dateOfBirth);
+    if (!userAge) {
+      return res.status(400).json({
+        message: "User date of birth missing",
+      });
+    }
+
     const oppositeGender = user.gender === "male" ? "female" : "male";
 
+    // ================= LOAD USER BEHAVIOR =================
+    const interests = await Interest.find({
+      senderId: user._id,
+    }).select("receiverId");
+
+    const interestIds = interests.map((i) => i.receiverId.toString());
+
+    // ================= FETCH PROFILES =================
     const profiles = await User.find({
       _id: { $ne: user._id },
       gender: oppositeGender,
       isActive: true,
       role: { $ne: "admin" },
-    });
+      maritalStatus: user.maritalStatus,
+    })
+      .select(
+        "firstName lastName profilePhoto caste religion education jobLocation state dateOfBirth profileCompleted lastLogin createdAt maritalStatus rejectedBy"
+      )
+      .limit(100)
+      .lean();
 
-    // ✅ scoring system
-    const scoredProfiles = profiles.map((p) => {
+    // ================= MATCH SCORING =================
+    let scoredProfiles = profiles.map((p) => {
+      if (!p.dateOfBirth || !p.maritalStatus) return null;
+
       let score = 0;
 
-      if (p.religion === user.religion) score += 30;
-      if (p.caste === user.caste) score += 20;
-      if (p.jobLocation === user.jobLocation) score += 25;
-      if (p.education === user.education) score += 15;
+      const candidateAge = calculateAge(p.dateOfBirth);
+      if (!candidateAge) return null;
 
-      // fallback (avoid empty feel)
-      if (score === 0) score = 5;
+      // ================= AGE MATCH (STRICT + MUTUAL)
+      if (Math.abs(candidateAge - userAge) <= 5) {
+        score += 25;
+      } else {
+        return null;
+      }
 
-      return { ...p.toObject(), matchScore: score };
+      // ================= MARITAL STATUS
+      if (p.maritalStatus === user.maritalStatus) {
+        score += 20;
+      } else {
+        return null;
+      }
+
+      // ================= RELIGION
+      if (p.religion && user.religion && p.religion === user.religion) {
+        score += 20;
+      }
+
+      // ================= CASTE
+      if (p.caste && user.caste && p.caste === user.caste) {
+        score += 10;
+      }
+
+      // ================= EDUCATION
+      if (p.education && user.education && p.education === user.education) {
+        score += 5;
+      }
+
+      // ================= LOCATION
+      if (
+        p.jobLocation &&
+        user.jobLocation &&
+        p.jobLocation.toLowerCase().trim() ===
+        user.jobLocation.toLowerCase().trim()
+      ) {
+        score += 15;
+      } else if (p.state && user.state && p.state === user.state) {
+        score += 8;
+      }
+
+      // ================= ACTIVITY BOOST
+      if (p.lastLogin) {
+        const hours =
+          (Date.now() - new Date(p.lastLogin)) / (1000 * 60 * 60);
+
+        if (hours <= 24) score += 10;
+        else if (hours <= 72) score += 5;
+      }
+
+      // ================= BEHAVIOR BOOST
+      if (interestIds.includes(p._id.toString())) {
+        score += 5;
+      }
+
+      // ================= PROFILE COMPLETION BOOST
+      if (p.profileCompleted >= 80) score += 10;
+      else if (p.profileCompleted >= 50) score += 5;
+
+      // ================= NEW USER BOOST
+      if (p.createdAt) {
+        const days =
+          (Date.now() - new Date(p.createdAt)) /
+          (1000 * 60 * 60 * 24);
+
+        if (days <= 3) score += 5;
+      }
+
+      // ================= NEGATIVE SIGNAL (OPTIONAL)
+      if (p.rejectedBy?.includes(user._id)) {
+        score -= 10;
+      }
+
+      return {
+        ...p,
+        matchScore: Math.round(score),
+      };
     });
 
-    scoredProfiles.sort((a, b) => b.matchScore - a.matchScore);
+    // ================= FILTER QUALITY =================
+    let filtered = scoredProfiles.filter(
+      (p) => p !== null && p.matchScore >= 40
+    );
 
-    res.json(scoredProfiles.slice(0, 6));
+    // ================= FALLBACK =================
+    if (filtered.length === 0) {
+      filtered = scoredProfiles.filter((p) => p !== null);
+    }
+
+    // ================= FINAL SORT (WITH SMART RANDOMNESS) =================
+    filtered.sort((a, b) => {
+      if (b.matchScore === a.matchScore) {
+        return Math.random() - 0.5;
+      }
+      return b.matchScore - a.matchScore;
+    });
+
+    // ================= RESPONSE =================
+    res.json(filtered.slice(0, 10));
   } catch (error) {
+    console.error("Recommendation error:", error);
     res.status(500).json({ message: "Recommendation error" });
   }
 };
@@ -107,12 +239,14 @@ exports.getNearMatches = async (req, res) => {
 
     const oppositeGender = user.gender === "male" ? "female" : "male";
 
-    // ⚠️ NOT strict location (important)
     const matches = await User.find({
       _id: { $ne: user._id },
       gender: oppositeGender,
       role: { $ne: "admin" },
-    }).limit(6);
+      jobLocation: new RegExp(`^${user.jobLocation}$`, "i"),
+    })
+      .limit(6)
+      .lean();
 
     res.json(matches);
   } catch (error) {

@@ -3,6 +3,7 @@ const router = express.Router();
 
 const {
   searchProfiles,
+  publicSearchProfiles,
   getMatches,
   viewProfile,
   getVisitors,
@@ -12,6 +13,10 @@ const {
 } = require("../../controllers/users/searchController");
 
 const { protect } = require("../../middleware/auth.middleware");
+
+
+// Public search (no auth) - /api/users/search/public
+router.get("/public", publicSearchProfiles);
 
 // All routes protected
 router.use(protect);

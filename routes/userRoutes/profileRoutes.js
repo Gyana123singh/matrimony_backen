@@ -18,6 +18,7 @@ const {
   viewProfile,
   getVisitors,
   getVisitorStats,
+ 
 } = require("../../controllers/users/profileController");
 
 const { protect } = require("../../middleware/auth.middleware");

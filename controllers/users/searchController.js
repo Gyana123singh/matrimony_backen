@@ -12,6 +12,10 @@ exports.searchProfiles = async (req, res) => {
       caste,
       education,
       location,
+      profession,
+      maritalStatus,
+      smoking,
+      drinking,
       page = 1,
       limit = 10,
     } = req.query;
@@ -27,6 +31,10 @@ exports.searchProfiles = async (req, res) => {
     if (caste) query.caste = caste;
     if (education) query.education = education;
     if (location) query.jobLocation = new RegExp(location, "i");
+    if (profession) query.job = new RegExp(profession, "i");
+    if (maritalStatus) query.maritalStatus = maritalStatus;
+    if (smoking) query.smoking = smoking;
+    if (drinking) query.drinking = drinking;
 
     // Age filter
     if (minAge || maxAge) {
@@ -74,6 +82,90 @@ exports.searchProfiles = async (req, res) => {
     });
   } catch (error) {
     console.error("Error searching profiles:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Public search (no authentication required)
+exports.publicSearchProfiles = async (req, res) => {
+  try {
+    const {
+      gender,
+      minAge,
+      maxAge,
+      religion,
+      caste,
+      education,
+      location,
+      profession,
+      maritalStatus,
+      smoking,
+      drinking,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const query = {
+      isActive: true,
+      isBanned: false,
+    };
+
+    if (gender) query.gender = gender;
+    if (religion) query.religion = religion;
+    if (caste) query.caste = caste;
+    if (education) query.education = education;
+    if (location) query.jobLocation = new RegExp(location, "i");
+    if (profession) query.job = new RegExp(profession, "i");
+    if (maritalStatus) query.maritalStatus = maritalStatus;
+    if (smoking) query.smoking = smoking;
+    if (drinking) query.drinking = drinking;
+
+    // Age filter
+    if (minAge || maxAge) {
+      const now = new Date();
+      if (minAge) {
+        const maxDate = new Date(
+          now.getFullYear() - minAge,
+          now.getMonth(),
+          now.getDate(),
+        );
+        query.dateOfBirth = { $lte: maxDate };
+      }
+      if (maxAge) {
+        const minDate = new Date(
+          now.getFullYear() - maxAge,
+          now.getMonth(),
+          now.getDate(),
+        );
+        if (query.dateOfBirth) {
+          query.dateOfBirth.$gte = minDate;
+        } else {
+          query.dateOfBirth = { $gte: minDate };
+        }
+      }
+    }
+
+    const skip = (page - 1) * limit;
+
+    const profiles = await User.find(query)
+      .select("-password")
+      .limit(limit)
+      .skip(skip)
+      .sort({ createdAt: -1 });
+
+    const total = await User.countDocuments(query);
+
+    res.status(200).json({
+      message: "Profiles fetched successfully",
+      profiles,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error searching profiles (public):", error);
     res.status(500).json({ message: "Server error" });
   }
 };
