@@ -37,8 +37,8 @@ const paymentSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["stripe", "paypal", "wallet"],
-      required: true,
+      enum: ["stripe", "paypal", "wallet", "ccavenue"],
+      default: "ccavenue",
     },
 
     transactionId: String,

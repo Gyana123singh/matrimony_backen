@@ -109,6 +109,7 @@ const userSchema = new mongoose.Schema(
     // maritalStatus already defined earlier with enum; remove duplicate
 
     education: String,
+    fieldOfStudy: String,
 
     job: String,
 
