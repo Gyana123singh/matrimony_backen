@@ -2,7 +2,7 @@ const Payment = require("../../models/Payment");
 const Package = require("../../models/Package");
 const User = require("../../models/User");
 const Notification = require("../../models/Notification");
-const crypto = require("crypto");
+
 
 /**
  * Encrypt parameters for CCAvenue using AES-128-CBC.
@@ -13,8 +13,8 @@ function encryptCCAvenue(plainText, workingKey) {
 
   const iv = Buffer.alloc(16, 0);
 
-  // ✅ FIXED LINE
-  const key = Buffer.from(workingKey, "hex");
+  // ✅ FINAL CORRECT WAY
+  const key = Buffer.from(workingKey.substring(0, 16), "utf8");
 
   const cipher = crypto.createCipheriv("aes-128-cbc", key, iv);
 
