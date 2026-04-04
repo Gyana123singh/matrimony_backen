@@ -11,10 +11,10 @@ const crypto = require("crypto");
 function encryptCCAvenue(plainText, workingKey) {
   const crypto = require("crypto");
 
-  // ✅ IMPORTANT FIX (MD5 key generation)
-  const key = crypto.createHash("md5").update(workingKey).digest();
-
   const iv = Buffer.alloc(16, 0);
+
+  // ✅ USE DIRECT KEY (NO MD5)
+  const key = Buffer.from(workingKey).slice(0, 16);
 
   const cipher = crypto.createCipheriv("aes-128-cbc", key, iv);
 
