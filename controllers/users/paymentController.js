@@ -13,8 +13,8 @@ function encryptCCAvenue(plainText, workingKey) {
 
   const iv = Buffer.alloc(16, 0);
 
-  // ✅ USE DIRECT KEY (NO MD5)
-  const key = Buffer.from(workingKey).slice(0, 16);
+  // ✅ FIXED LINE
+  const key = Buffer.from(workingKey, "hex");
 
   const cipher = crypto.createCipheriv("aes-128-cbc", key, iv);
 

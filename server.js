@@ -77,7 +77,7 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
     const decipher = crypto.createDecipheriv(
       "aes-128-cbc",
-      Buffer.from(workingKey).slice(0, 16),
+      Buffer.from(workingKey, "hex"),
       Buffer.alloc(16, 0)
     );
 
