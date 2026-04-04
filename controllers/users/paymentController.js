@@ -9,14 +9,18 @@ const crypto = require("crypto");
  * Returns a base64-encoded encrypted string suitable for the `encRequest` field.
  */
 function encryptCCAvenue(plainText, workingKey) {
-  const algorithm = "aes-128-cbc";
-  // CCAvenue expects a 16 byte IV. Use zero IV for compatibility with many examples.
-  const iv = Buffer.alloc(16, 0);
-  const key = Buffer.from(workingKey, "utf8").slice(0, 16);
+  const crypto = require("crypto");
 
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
+  // ✅ IMPORTANT FIX (MD5 key generation)
+  const key = crypto.createHash("md5").update(workingKey).digest();
+
+  const iv = Buffer.alloc(16, 0);
+
+  const cipher = crypto.createCipheriv("aes-128-cbc", key, iv);
+
   let encrypted = cipher.update(plainText, "utf8", "base64");
   encrypted += cipher.final("base64");
+
   return encrypted;
 }
 // Get available packages
@@ -114,10 +118,12 @@ exports.createPaymentIntent = async (req, res) => {
     params.push(`merchant_param3=${package.name}`);
 
     const paramString = params.join("&");
+    console.log("PARAM STRING:", paramString);
+    console.log("WORKING KEY:", working_key);
 
     // Encrypt using working key
     const encRequest = encryptCCAvenue(paramString, working_key || "");
-
+    console.log("ENC REQUEST:", encRequest);
     return res.status(201).json({
       paymentId: payment._id,
       ccavenue: {
