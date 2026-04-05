@@ -119,14 +119,14 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
       });
 
       return res.redirect(
-        "https://marathishubhavivah.com/payment-success"
+        "https://marathishubhavivah.com/user/payment-success"
       );
     } else {
       payment.status = "failed";
       await payment.save();
 
       return res.redirect(
-        "https://marathishubhavivah.com/payment-failed"
+        "https://marathishubhavivah.com/user/payment-failed"
       );
     }
   } catch (error) {
