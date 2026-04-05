@@ -2,27 +2,10 @@ const Payment = require("../../models/Payment");
 const Package = require("../../models/Package");
 const User = require("../../models/User");
 const Notification = require("../../models/Notification");
+const ccav = require("../../util/ccavutil");
 
 
-/**
- * Encrypt parameters for CCAvenue using AES-128-CBC.
- * Returns a base64-encoded encrypted string suitable for the `encRequest` field.
- */
-function encryptCCAvenue(plainText, workingKey) {
-  const crypto = require("crypto");
 
-  const iv = Buffer.alloc(16, 0);
-
-  // ✅ FINAL CORRECT WAY
-  const key = Buffer.from(workingKey.substring(0, 16), "utf8");
-
-  const cipher = crypto.createCipheriv("aes-128-cbc", key, iv);
-
-  let encrypted = cipher.update(plainText, "utf8", "base64");
-  encrypted += cipher.final("base64");
-
-  return encrypted;
-}
 // Get available packages
 exports.getPackages = async (req, res) => {
   try {
@@ -55,24 +38,22 @@ exports.createPaymentIntent = async (req, res) => {
       return res.status(404).json({ message: "Package not found" });
     }
 
-    // ✅ Duration safe handling
     const duration = Number(package.duration || package.validity);
 
     if (!duration || isNaN(duration)) {
       return res.status(400).json({
-        message: "Invalid package duration/validity",
+        message: "Invalid package duration",
       });
     }
 
-    // 🔥 CREATE CCAvenue REQUEST
-    // Build order parameters required by CCAvenue and encrypt them using the working key.
+    // 🔥 ENV VARIABLES
     const merchant_id = process.env.CCAVENUE_MERCHANT_ID;
     const access_code = process.env.CCAVENUE_ACCESS_CODE;
-    const working_key = process.env.CCAVENUE_WORKING_KEY; // used for encryption
+    const working_key = process.env.CCAVENUE_WORKING_KEY;
     const redirect_url = process.env.CCAVENUE_REDIRECT_URL;
     const cancel_url = process.env.CCAVENUE_CANCEL_URL;
 
-    // create payment document first to generate an order id
+    // 🔥 CREATE PAYMENT
     const payment = new Payment({
       userId,
       packageId: package._id,
@@ -80,57 +61,49 @@ exports.createPaymentIntent = async (req, res) => {
       amount: package.price,
       paymentMethod: "ccavenue",
       description: `Subscription to ${package.name}`,
-      duration: duration,
+      duration,
       status: "initiated",
-      // We'll store the CCAvenue order id after saving the payment (orderId uses payment._id)
-
-      // 🔥 SAVE FEATURES
       features: {
         contactViews: package.features?.contactView || 0,
         interestExpress: package.features?.interestExpress || 0,
         imageUploads: package.features?.imageUpload || 0,
       },
-
-      // 🔥 SAVE BENEFITS
       benefits: package.benefits || [],
     });
 
     await payment.save();
 
-    // Create an order id for CCAvenue (use payment id with prefix)
     const order_id = `order_${payment._id}`;
     payment.ccavenueOrderId = order_id;
     await payment.save();
 
-    // Build parameter string for CCAvenue
-    const params = [];
-    params.push(`merchant_id=${merchant_id}`);
-    params.push(`order_id=${order_id}`);
-    params.push(`amount=${package.price}`);
-    params.push(`currency=INR`);
-    if (redirect_url) params.push(`redirect_url=${redirect_url}`);
-    if (cancel_url) params.push(`cancel_url=${cancel_url}`);
-    params.push(`language=EN`);
-
-    // Optional: attach user metadata so we can reconcile on return
-    params.push(`merchant_param1=${userId}`);
-    params.push(`merchant_param2=${package._id}`);
-    params.push(`merchant_param3=${package.name}`);
+    // 🔥 PARAM STRING
+    const params = [
+      `merchant_id=${merchant_id}`,
+      `order_id=${order_id}`,
+      `currency=INR`,
+      `amount=${package.price}`,
+      `redirect_url=${redirect_url}`,
+      `cancel_url=${cancel_url}`,
+      `language=EN`,
+      `merchant_param1=${userId}`,
+      `merchant_param2=${package._id}`,
+      `merchant_param3=${package.name}`,
+    ];
 
     const paramString = params.join("&");
-    console.log("PARAM STRING:", paramString);
-    console.log("WORKING KEY:", working_key);
 
-    // Encrypt using working key
-    const encRequest = encryptCCAvenue(paramString, working_key || "");
+    console.log("PARAM STRING:", paramString);
+
+    // ✅ CORRECT ENCRYPTION
+    const encRequest = ccav.encrypt(paramString, working_key);
+
     console.log("ENC REQUEST:", encRequest);
+
     return res.status(201).json({
       paymentId: payment._id,
       ccavenue: {
-        merchant_id,
         access_code,
-        order_id,
-        amount: package.price,
         encRequest,
       },
     });

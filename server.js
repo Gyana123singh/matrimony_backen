@@ -68,25 +68,18 @@ app.use("/api/admin", adminRoutes);
 
 app.post("/api/payments/ccavenue/response", async (req, res) => {
   try {
-    const crypto = require("crypto");
+    const ccav = require("./utils/ccavutil");
     const Payment = require("./models/Payment");
     const User = require("./models/User");
 
     const workingKey = process.env.CCAVENUE_WORKING_KEY;
     const encResp = req.body.encResp;
 
-    const decipher = crypto.createDecipheriv(
-      "aes-128-cbc",
-      Buffer.from(workingKey.substring(0, 16), "utf8"),
-      Buffer.alloc(16, 0)
-    );
+    // ✅ CORRECT DECRYPTION
+    const decrypted = ccav.decrypt(encResp, workingKey);
 
-    let decrypted = decipher.update(encResp, "base64", "utf8");
-    decrypted += decipher.final("utf8");
+    console.log("🔓 Decrypted Response:", decrypted);
 
-    console.log("🔓 Payment Response:", decrypted);
-
-    // 🔥 Convert to object
     const response = Object.fromEntries(
       decrypted.split("&").map((item) => item.split("="))
     );
@@ -94,7 +87,6 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     const order_id = response.order_id;
     const order_status = response.order_status;
 
-    // 🔥 Find payment
     const payment = await Payment.findOne({
       ccavenueOrderId: order_id,
     });
@@ -117,7 +109,6 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
       await payment.save();
 
-      // ✅ Update user
       await User.findByIdAndUpdate(payment.userId, {
         subscriptionPlan: payment.packageName,
         subscriptionStatus: "active",

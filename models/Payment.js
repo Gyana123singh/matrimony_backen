@@ -40,7 +40,10 @@ const paymentSchema = new mongoose.Schema(
       enum: ["stripe", "paypal", "wallet", "ccavenue"],
       default: "ccavenue",
     },
-
+    ccavenueOrderId: {
+      type: String,
+      index: true,
+    },
     transactionId: String,
 
     stripePaymentIntentId: String,
