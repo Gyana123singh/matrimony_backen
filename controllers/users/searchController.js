@@ -63,13 +63,36 @@ exports.searchProfiles = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const profiles = await User.find(query)
+    let profiles = await User.find(query)
       .select("-password")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });
 
     const total = await User.countDocuments(query);
+
+    // Apply photo privacy rules per profile based on viewer subscription / ownership
+    const viewer = await User.findById(userId).select("subscriptionStatus subscriptionEndDate");
+    const viewerHasActive =
+      viewer && viewer.subscriptionStatus === "active" && (!viewer.subscriptionEndDate || new Date() < viewer.subscriptionEndDate);
+
+    profiles = profiles.map((p) => {
+      const obj = p.toObject();
+
+      const hidePhotos = obj.privacySettings?.hidePhotos;
+
+      // Owner can always see their own photos
+      if (obj._id.toString() === userId.toString()) return obj;
+
+      if (hidePhotos) {
+        if (!viewerHasActive) {
+          obj.profilePhoto = "/default-avatar.png";
+          obj.photos = [];
+        }
+      }
+
+      return obj;
+    });
 
     res.status(200).json({
       message: "Profiles fetched successfully",
@@ -147,13 +170,26 @@ exports.publicSearchProfiles = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const profiles = await User.find(query)
+    let profiles = await User.find(query)
       .select("-password")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });
 
     const total = await User.countDocuments(query);
+
+    // Public viewers should not see photos when target profile has hidePhotos enabled
+    profiles = profiles.map((p) => {
+      const obj = p.toObject();
+      const hidePhotos = obj.privacySettings?.hidePhotos;
+
+      if (hidePhotos) {
+        obj.profilePhoto = "/default-avatar.png";
+        obj.photos = [];
+      }
+
+      return obj;
+    });
 
     res.status(200).json({
       message: "Profiles fetched successfully",
@@ -195,13 +231,32 @@ exports.getMatches = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    const matches = await User.find(query)
+    let matches = await User.find(query)
       .select("-password")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });
 
     const total = await User.countDocuments(query);
+
+    // apply photo privacy similar to search
+    const viewer = user; // already fetched above
+    const viewerHasActive =
+      viewer && viewer.subscriptionStatus === "active" && (!viewer.subscriptionEndDate || new Date() < viewer.subscriptionEndDate);
+
+    matches = matches.map((p) => {
+      const obj = p.toObject();
+      const hidePhotos = obj.privacySettings?.hidePhotos;
+
+      if (obj._id.toString() === userId.toString()) return obj;
+
+      if (hidePhotos && !viewerHasActive) {
+        obj.profilePhoto = "/default-avatar.png";
+        obj.photos = [];
+      }
+
+      return obj;
+    });
 
     res.status(200).json({
       message: "Matches fetched successfully",
@@ -229,8 +284,23 @@ exports.viewProfile = async (req, res) => {
     if (!profile || !profile.isActive || profile.isBanned) {
       return res.status(404).json({ message: "Profile not found" });
     }
+    // Ensure viewer has an active subscription AND remaining views > 0
+    const viewer = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        subscriptionStatus: "active",
+        subscriptionEndDate: { $gt: new Date() },
+        remainingViews: { $gt: 0 },
+      },
+      { $inc: { remainingViews: -1 } },
+      { new: true }
+    );
 
-    // Add to visitors
+    if (!viewer) {
+      return res.status(403).json({ message: "Upgrade required" });
+    }
+
+    // Add to visitors if not already present
     const isAlreadyVisited = profile.visitors.some(
       (v) => v.userId.toString() === userId.toString(),
     );
@@ -246,6 +316,7 @@ exports.viewProfile = async (req, res) => {
     res.status(200).json({
       message: "Profile retrieved successfully",
       profile,
+      remainingViews: viewer.remainingViews,
     });
   } catch (error) {
     console.error("Error viewing profile:", error);

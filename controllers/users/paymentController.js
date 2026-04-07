@@ -73,6 +73,19 @@ exports.createPaymentIntent = async (req, res) => {
 
     await payment.save();
 
+    // Emit dashboard update for admins (payment success recorded)
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("dashboard:graphUpdated", {
+          type: "payment:success",
+          payment: { _id: payment._id, amount: payment.amount, createdAt: payment.createdAt },
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to emit dashboard update on payment confirm:", e);
+    }
+
     const order_id = `order_${payment._id}`;
     payment.ccavenueOrderId = order_id;
     await payment.save();
@@ -132,12 +145,14 @@ exports.confirmPayment = async (req, res) => {
       return res.status(404).json({ message: "Payment not found" });
     }
 
-    // ✅ Prevent duplicate confirmation
+    // Prevent duplicate confirmation
     if (payment.status === "success") {
       return res.status(400).json({ message: "Payment already confirmed" });
     }
 
-    // ✅ Update payment
+    // Update payment record only. Do NOT activate user subscription here.
+    // Activation must happen only from the CCAvenue response endpoint to
+    // avoid duplicate/forged activations.
     payment.status = "success";
     payment.transactionId = transactionId;
 
@@ -151,43 +166,9 @@ exports.confirmPayment = async (req, res) => {
 
     await payment.save();
 
-    // ✅ UPDATE USER USING PAYMENT SNAPSHOT
-    const user = await User.findByIdAndUpdate(
-      userId,
-      {
-        subscriptionPlan: payment.packageName,
-        subscriptionStatus: "active",
-        subscriptionStartDate: startDate,
-        subscriptionEndDate: endDate,
-
-        // 🔥 USE SAVED FEATURES
-        subscriptionFeatures: payment.features,
-        subscriptionBenefits: payment.benefits,
-
-        $inc: { totalSpent: payment.amount },
-      },
-      { new: true }
-    );
-
-    // ✅ CREATE NOTIFICATION
-    await Notification.create({
-      userId,
-      title: "Subscription Activated 🎉",
-      message: `Your ${payment.packageName} plan is now active`,
-      type: "promo",
-    });
-
-    // ✅ SOCKET EMIT
-    const io = req.app.get("io");
-    io.to(`user:${userId}`).emit("notification:new", {
-      title: "Subscription Activated 🎉",
-      message: `Your ${payment.packageName} plan is active`,
-    });
-
     return res.status(200).json({
-      message: "Payment successful",
+      message: "Payment recorded. Subscription activation will occur via payment gateway response.",
       payment,
-      user,
     });
 
   } catch (error) {

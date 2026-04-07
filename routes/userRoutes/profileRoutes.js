@@ -18,10 +18,11 @@ const {
   viewProfile,
   getVisitors,
   getVisitorStats,
- 
+
 } = require("../../controllers/users/profileController");
 
 const { protect } = require("../../middleware/auth.middleware");
+const checkSubscription = require("../../middleware/checkSubscription");
 
 // All routes require authentication
 router.use(protect);
@@ -30,7 +31,7 @@ router.get("/", getUserProfile);
 router.put("/", updateUserProfile);
 router.put("/family", updateFamilyInfo);
 router.put("/preferences", updatePreferences);
-router.post("/photos", addPhotos);
+router.post("/photos", checkSubscription, addPhotos);
 router.delete("/photos/:photoId", deletePhoto);
 router.post("/change-password", changePassword);
 router.get("/notifications/preferences", getNotificationPreferences);

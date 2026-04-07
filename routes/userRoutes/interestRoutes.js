@@ -11,11 +11,12 @@ const {
 } = require("../../controllers/users/interestController");
 
 const { protect } = require("../../middleware/auth.middleware");
+const checkSubscription = require("../../middleware/checkSubscription");
 
 // All routes require authentication
 router.use(protect);
 
-router.post("/send", sendInterest);
+router.post("/send", checkSubscription, sendInterest);
 router.get("/received", getReceivedInterests);
 router.get("/sent", getSentInterests);
 router.put("/:interestId/accept", acceptInterest);

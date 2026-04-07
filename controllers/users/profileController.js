@@ -338,13 +338,24 @@ exports.addPhotos = async (req, res) => {
       return res.status(400).json({ message: "Photo URL required" });
     }
 
-    const user = await User.findByIdAndUpdate(
-      userId,
+    // Decrement remainingUploads atomically and ensure subscription active
+    const user = await User.findOneAndUpdate(
       {
+        _id: userId,
+        subscriptionStatus: "active",
+        subscriptionEndDate: { $gt: new Date() },
+        remainingUploads: { $gt: 0 },
+      },
+      {
+        $inc: { remainingUploads: -1 },
         $push: { photos: { url: photoUrl } },
       },
       { new: true },
     ).select("-password");
+
+    if (!user) {
+      return res.status(403).json({ message: "Upgrade required or no uploads remaining" });
+    }
 
     res.status(200).json({
       message: "Photo added successfully",

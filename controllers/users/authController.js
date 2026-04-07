@@ -190,6 +190,19 @@ exports.registerUser = async (req, res) => {
 
     await user.save();
 
+    // Emit dashboard update for admins (new user registered)
+    try {
+      const io = req.app.get("io");
+      if (io) {
+        io.to("admin:all").emit("dashboard:graphUpdated", {
+          type: "user:registered",
+          user: { _id: user._id, createdAt: user.createdAt },
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to emit dashboard update on user register:", e);
+    }
+
     res.status(201).json({
       message: "User registered successfully",
       user,

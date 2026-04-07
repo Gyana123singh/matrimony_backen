@@ -305,9 +305,10 @@ exports.getPaymentStats = async (req, res) => {
 // Toggle Package Status (Enable / Disable)
 exports.togglePackageStatus = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { packageId, id } = req.params; // support both names
+    const pkgId = packageId || id;
 
-    const pkg = await Package.findById(id);
+    const pkg = await Package.findById(pkgId);
 
     if (!pkg) {
       return res.status(404).json({ message: "Package not found" });

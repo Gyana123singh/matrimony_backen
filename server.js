@@ -94,14 +94,27 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     if (!payment) {
       return res.send("Payment not found");
     }
+    // Security: validate merchant_param1 matches payment.userId (if present)
+    const merchantUserId = response.merchant_param1;
+    if (merchantUserId && merchantUserId !== payment.userId.toString()) {
+      console.warn(`Merchant param user mismatch: ${merchantUserId} != ${payment.userId}`);
+      payment.status = "failed";
+      await payment.save();
+      return res.send("User mismatch");
+    }
+
+    // Idempotency: if payment already marked success, do not re-activate
+    if (payment.status === "success") {
+      return res.redirect("https://marathishubhavivah.com/user/payment-success");
+    }
 
     if (order_status === "Success") {
       payment.status = "success";
-      payment.transactionId = response.tracking_id;
+      payment.transactionId = response.tracking_id || response.tracking_id || "";
 
       const startDate = new Date();
       const endDate = new Date(
-        Date.now() + payment.duration * 24 * 60 * 60 * 1000
+        Date.now() + (payment.duration || 0) * 24 * 60 * 60 * 1000
       );
 
       payment.startDate = startDate;
@@ -109,25 +122,43 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
       await payment.save();
 
+      // Activate user's subscription ONLY from this trusted response
       await User.findByIdAndUpdate(payment.userId, {
         subscriptionPlan: payment.packageName,
         subscriptionStatus: "active",
         subscriptionStartDate: startDate,
         subscriptionEndDate: endDate,
+
         subscriptionFeatures: payment.features,
         subscriptionBenefits: payment.benefits,
+
+        remainingViews: payment.features.contactViews,
+        remainingInterests: payment.features.interestExpress,
+        remainingUploads: payment.features.imageUploads,
+        $inc: { totalSpent: payment.amount },
       });
 
-      return res.redirect(
-        "https://marathishubhavivah.com/user/payment-success"
-      );
+      // Emit dashboard update for admins (payment success from gateway)
+      try {
+        if (app && app.get) {
+          const io = app.get('io');
+          if (io) {
+            io.to('admin:all').emit('dashboard:graphUpdated', {
+              type: 'payment:success',
+              payment: { _id: payment._id, amount: payment.amount, createdAt: payment.createdAt },
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to emit dashboard update in CCAV response:', e);
+      }
+
+      return res.redirect("https://marathishubhavivah.com/user/payment-success");
     } else {
       payment.status = "failed";
       await payment.save();
 
-      return res.redirect(
-        "https://marathishubhavivah.com/user/payment-failed"
-      );
+      return res.redirect("https://marathishubhavivah.com/user/payment-failed");
     }
   } catch (error) {
     console.error("❌ Response Error:", error);
@@ -157,6 +188,28 @@ initializeSocketEvents(io);
 
 // Make io accessible to request handlers via req.app.get('io')
 app.set("io", io);
+
+// ================== SCHEDULED JOBS ==================
+try {
+  const cron = require("node-cron");
+  const User = require("./models/User");
+
+  // Run every day at 00:05 server time
+  cron.schedule("5 0 * * *", async () => {
+    try {
+      const now = new Date();
+      const result = await User.updateMany(
+        { subscriptionStatus: "active", subscriptionEndDate: { $lt: now } },
+        { $set: { subscriptionStatus: "expired" } }
+      );
+      console.log(`Cron: expired subscriptions updated: ${result.modifiedCount}`);
+    } catch (err) {
+      console.error("Cron job error:", err);
+    }
+  });
+} catch (err) {
+  console.warn("node-cron not available, skipping scheduled jobs");
+}
 
 // ================== SERVER ==================
 

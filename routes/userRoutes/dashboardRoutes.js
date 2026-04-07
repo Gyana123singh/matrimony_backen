@@ -16,6 +16,7 @@ const {
 const { updateLastSeen } = require("../../middleware/updateLastSeen");
 
 const { protect } = require("../../middleware/auth.middleware");
+const checkSubscription = require("../../middleware/checkSubscription");
 
 router.use(protect);
 // router.use(updateLastSeen);
@@ -27,8 +28,9 @@ router.get("/interests", getNewInterests);
 router.get("/near-matches", getNearMatches);
 router.get("/active-users", getActiveUsers);
 router.get("/visitors", getVisitors);
-router.post("/visit/:profileId", trackVisit);
-router.post("/like/:profileId", toggleLike);
+// Keep read-only dashboard endpoints open to all authenticated users (no subscription required)
+router.post("/visit/:profileId", checkSubscription, trackVisit);
+router.post("/like/:profileId", checkSubscription, toggleLike);
 
 
 module.exports = router;

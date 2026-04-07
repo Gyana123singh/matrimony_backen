@@ -1,209 +1,222 @@
 const Ticket = require("../../models/Ticket");
+const User = require("../../models/User");
 
-// Create ticket
+// Create new ticket (user)
 exports.createTicket = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { subject, description, category } = req.body;
+    const userId = req.user?._id || req.user?.id;
+    const { subject, details, priority } = req.body;
 
-    const ticket = new Ticket({
+    if (!subject || !details) {
+      return res.status(400).json({ message: "Subject and details are required" });
+    }
+
+    const ticket = await Ticket.create({
       userId,
       subject,
-      description,
-      category,
+      details,
+      priority: priority || "Medium",
       status: "pending",
     });
 
-    await ticket.save();
-
-    // Emit real-time notification to admins
-    try {
-      const io = req.app.get("io");
-      if (io) {
-        const populated = await Ticket.findById(ticket._id).populate(
-          "userId",
-          "firstName lastName email",
-        );
-
-        io.to("admin:all").emit("ticket:new", {
-          _id: populated._id,
-          user: populated.userId,
-          subject: populated.subject,
-          description: populated.description,
-          category: populated.category,
-          priority: populated.priority,
-          status: populated.status,
-          createdAt: populated.createdAt,
-        });
-      }
-    } catch (err) {
-      console.error("Error emitting ticket event:", err);
-    }
-
-    res.status(201).json({
-      message: "Support ticket created successfully",
-      ticket,
-    });
+    return res.status(201).json({ message: "Ticket created", ticket });
   } catch (error) {
-    console.error("Error creating ticket:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("createTicket error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get user tickets
-exports.getTickets = async (req, res) => {
+// Get tickets for logged-in user
+exports.getUserTickets = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { status, page = 1, limit = 10 } = req.query;
-
-    const query = { userId };
-    if (status) query.status = status;
-
-    const skip = (page - 1) * limit;
-
-    const tickets = await Ticket.find(query)
-      .limit(limit)
-      .skip(skip)
-      .sort({ createdAt: -1 });
-
-    const total = await Ticket.countDocuments(query);
-
-    res.status(200).json({
-      message: "Tickets retrieved successfully",
-      tickets,
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit),
-      },
-    });
+    const userId = req.user?._id || req.user?.id;
+    const tickets = await Ticket.find({ userId }).sort({ createdAt: -1 });
+    return res.json({ tickets });
   } catch (error) {
-    console.error("Error fetching tickets:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("getUserTickets error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
 // Get ticket details
 exports.getTicketDetails = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { ticketId } = req.params;
+    const { id } = req.params;
+    const ticket = await Ticket.findById(id)
+      .populate("userId", "firstName lastName email")
+      .populate("assignedTo", "firstName lastName email");
 
-    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket not found" });
-    }
-
-    if (ticket.userId.toString() !== userId.toString()) {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
-
-    res.status(200).json({
-      message: "Ticket details retrieved successfully",
-      ticket,
-    });
+    return res.json({ ticket });
   } catch (error) {
-    console.error("Error fetching ticket details:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("getTicketDetails error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-// Add reply to ticket
-exports.addReply = async (req, res) => {
+// Reply to ticket (user or admin)
+exports.replyTicket = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { ticketId } = req.params;
-    const { message, attachments } = req.body;
+    const { id } = req.params;
+    const { message } = req.body;
 
-    const ticket = await Ticket.findById(ticketId);
+    if (!message) return res.status(400).json({ message: "Message is required" });
 
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket not found" });
-    }
+    const ticket = await Ticket.findById(id);
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-    if (ticket.userId.toString() !== userId.toString()) {
-      return res.status(403).json({ message: "Unauthorized" });
-    }
+    const isAdmin = req.user && req.user.role === "admin";
+    const senderType = isAdmin ? "admin" : "user";
+    const senderName = req.user?.firstName
+      ? `${req.user.firstName} ${req.user.lastName || ""}`.trim()
+      : (req.user?.name || "Admin");
 
-    ticket.replies.push({
-      senderType: "user",
-      senderId: userId,
-      message,
-      attachments: attachments || [],
-    });
+    ticket.replies.push({ senderType, senderName, message });
 
+    // If admin replied, mark answered
+    if (senderType === "admin") ticket.status = "answered";
+
+    ticket.updatedAt = Date.now();
     await ticket.save();
 
-    // Emit user reply event to admins
-    try {
-      const io = req.app.get("io");
-      if (io) {
-        const populated = await Ticket.findById(ticket._id).populate(
-          "userId",
-          "firstName lastName email",
-        );
+    const populated = await Ticket.findById(id)
+      .populate("userId", "firstName lastName email")
+      .populate("assignedTo", "firstName lastName email");
 
-        io.to("admin:all").emit("ticket:userReply", {
-          ticketId: ticket._id,
-          user: populated.userId,
-          message,
-          sentAt: new Date(),
-        });
-      }
-    } catch (err) {
-      console.error("Error emitting ticket reply event:", err);
+    // Server-side debug log
+    try {
+      console.log("[ticketController.replyTicket] reply added:", {
+        ticketId: id,
+        senderType,
+        senderName,
+        message,
+        repliesCount: populated.replies ? populated.replies.length : 0,
+      });
+    } catch (e) {
+      console.warn("Could not log reply details", e);
     }
 
-    res.status(200).json({
-      message: "Reply added successfully",
-      ticket,
-    });
+    // Emit socket events so clients get realtime updates
+    try {
+      const io = req.app.get("io");
+      if (io && populated && populated.userId) {
+        const userIdVal = populated.userId._id || populated.userId;
+        const userRoom = `user:${userIdVal}`;
+        console.log(`[ticketController.replyTicket] emitting to room: ${userRoom}`);
+        const payload = { ticket: populated, reply: { senderType, senderName, message } };
+        io.to(userRoom).emit("ticket:replied", payload);
+
+        // notify admins as well
+        io.to("admin:all").emit("ticket:replyNotification", payload);
+        console.log("[ticketController.replyTicket] emitted ticket:replied and ticket:replyNotification");
+      } else {
+        console.warn("[ticketController.replyTicket] io or populated.userId missing, cannot emit");
+      }
+    } catch (e) {
+      console.warn("Failed to emit ticket reply socket events:", e);
+    }
+
+    return res.json({ message: "Reply added", ticket: populated });
   } catch (error) {
-    console.error("Error adding reply:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("replyTicket error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Assign ticket to admin
+exports.assignTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // if admin wants to assign to another admin, accept adminId in body
+    const assignTo = req.body.adminId || req.user?._id || req.user?.id;
+
+    const ticket = await Ticket.findByIdAndUpdate(
+      id,
+      { assignedTo: assignTo },
+      { new: true }
+    )
+      .populate("userId", "firstName lastName email")
+      .populate("assignedTo", "firstName lastName email");
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    return res.json({ message: "Ticket assigned", ticket });
+  } catch (error) {
+    console.error("assignTicket error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
 // Close ticket
 exports.closeTicket = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const { ticketId } = req.params;
+    const { id } = req.params;
+    const ticket = await Ticket.findById(id);
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
 
-    const ticket = await Ticket.findById(ticketId);
-
-    if (!ticket) {
-      return res.status(404).json({ message: "Ticket not found" });
-    }
-
-    if (ticket.userId.toString() !== userId.toString()) {
-      return res.status(403).json({ message: "Unauthorized" });
+    // Only owner or admin can close
+    const isAdmin = req.user && req.user.role === "admin";
+    const userId = req.user?._id || req.user?.id;
+    if (!isAdmin && ticket.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Not authorized to close this ticket" });
     }
 
     ticket.status = "closed";
-    ticket.closedAt = new Date();
     await ticket.save();
 
-    // Emit closed event to admins
-    try {
-      const io = req.app.get("io");
-      if (io) {
-        io.to("admin:all").emit("ticket:closedNotification", {
-          ticketId: ticket._id,
-          closedAt: ticket.closedAt,
-        });
-      }
-    } catch (err) {
-      console.error("Error emitting ticket closed event:", err);
+    const populated = await Ticket.findById(id)
+      .populate("userId", "firstName lastName email")
+      .populate("assignedTo", "firstName lastName email");
+
+    return res.json({ message: "Ticket closed", ticket: populated });
+  } catch (error) {
+    console.error("closeTicket error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Admin: get all tickets (with pagination + filter)
+exports.getAllTickets = async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10, q } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+
+    // Build search
+    if (q) {
+      const regex = new RegExp(q, "i");
+      filter.$or = [{ subject: regex }];
+      // We will search user name via aggregation/lookup by populating then filtering client-side if needed.
     }
 
-    res.status(200).json({
-      message: "Ticket closed successfully",
-      ticket,
-    });
+    const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
+
+    const total = await Ticket.countDocuments(filter);
+    const tickets = await Ticket.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .populate("userId", "firstName lastName email")
+      .populate("assignedTo", "firstName lastName email");
+
+    return res.json({ tickets, total, page: parseInt(page), limit: parseInt(limit) });
   } catch (error) {
-    console.error("Error closing ticket:", error);
-    res.status(500).json({ message: "Server error" });
+    console.error("getAllTickets error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Admin ticket stats (optional)
+exports.getTicketStats = async (req, res) => {
+  try {
+    const pending = await Ticket.countDocuments({ status: "pending" });
+    const answered = await Ticket.countDocuments({ status: "answered" });
+    const closed = await Ticket.countDocuments({ status: "closed" });
+
+    return res.json({ pending, answered, closed });
+  } catch (error) {
+    console.error("getTicketStats error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };

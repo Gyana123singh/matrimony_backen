@@ -13,6 +13,7 @@ const {
 } = require("../../controllers/users/searchController");
 
 const { protect } = require("../../middleware/auth.middleware");
+const checkSubscription = require("../../middleware/checkSubscription");
 
 
 // Public search (no auth) - /api/users/search/public
@@ -24,7 +25,7 @@ router.use(protect);
 // ✅ FIXED ROUTES (IMPORTANT)
 router.get("/", searchProfiles); // /api/users/search
 router.get("/matches", getMatches); // /api/users/search/matches
-router.get("/profile/:profileId", viewProfile);
+router.get("/profile/:profileId", checkSubscription, viewProfile);
 router.get("/visitors", getVisitors);
 router.post("/block", blockUser);
 router.post("/unblock", unblockUser);

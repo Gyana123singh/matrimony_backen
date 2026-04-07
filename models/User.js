@@ -246,7 +246,9 @@ const userSchema = new mongoose.Schema(
     subscriptionEndDate: Date,
 
     subscriptionAmount: Number,
-
+    remainingViews: { type: Number, default: 0 },
+    remainingInterests: { type: Number, default: 0 },
+    remainingUploads: { type: Number, default: 0 },
     // ================= VISIT TRACKING =================
 
     visitedProfiles: [
@@ -310,6 +312,7 @@ const userSchema = new mongoose.Schema(
       interestExpress: { type: Number, default: 0 },
       imageUploads: { type: Number, default: 0 },
     },
+    subscriptionBenefits: [{ type: String }],
     paymentMethod: String,
 
     lastPaymentDate: Date,

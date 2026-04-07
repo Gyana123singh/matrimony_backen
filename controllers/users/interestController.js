@@ -49,6 +49,22 @@ exports.sendInterest = async (req, res) => {
       return res.status(400).json({ message: "Interest already sent" });
     }
 
+    // Decrement sender's remainingInterests atomically
+    const updatedSender = await User.findOneAndUpdate(
+      {
+        _id: senderId,
+        subscriptionStatus: "active",
+        subscriptionEndDate: { $gt: new Date() },
+        remainingInterests: { $gt: 0 },
+      },
+      { $inc: { remainingInterests: -1 } },
+      { new: true }
+    );
+
+    if (!updatedSender) {
+      return res.status(403).json({ message: "Upgrade required" });
+    }
+
     const interest = await Interest.create({
       senderId,
       receiverId,
@@ -58,7 +74,7 @@ exports.sendInterest = async (req, res) => {
 
     await Notification.create({
       userId: receiverId,
-      title: `${sender.firstName} sent you an interest`,
+      title: `${updatedSender.firstName} sent you an interest`,
       message: "Check your interests",
       type: "interest",
       relatedUserId: senderId,

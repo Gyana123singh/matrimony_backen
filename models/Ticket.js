@@ -1,56 +1,38 @@
 const mongoose = require("mongoose");
 
+const replySchema = new mongoose.Schema(
+  {
+    senderType: {
+      type: String,
+      enum: ["user", "admin"],
+      required: true,
+    },
+    senderName: String,
+    message: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const ticketSchema = new mongoose.Schema(
   {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-
-    subject: {
-      type: String,
-      required: true,
-    },
-
-    description: {
-      type: String,
-      required: true,
-    },
-
-    category: {
-      type: String,
-      enum: ["technical", "payment", "profile", "account", "other"],
-      required: true,
-    },
-
-    status: {
-      type: String,
-      enum: ["pending", "assigned", "in_progress", "answered", "closed"],
-      default: "pending",
-    },
-
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    subject: { type: String, required: true },
+    details: { type: String, required: true },
     priority: {
       type: String,
-      enum: ["low", "medium", "high"],
-      default: "medium",
+      enum: ["High", "Medium", "Low"],
+      default: "Medium",
     },
-
-    assignedToAdmin: mongoose.Schema.Types.ObjectId,
-
-    replies: [
-      {
-        senderType: { type: String, enum: ["user", "admin"] },
-        senderId: mongoose.Schema.Types.ObjectId,
-        message: String,
-        attachments: [String],
-        createdAt: { type: Date, default: Date.now },
-      },
-    ],
-
-    closedAt: Date,
+    status: {
+      type: String,
+      enum: ["pending", "answered", "closed"],
+      default: "pending",
+    },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    replies: [replySchema],
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Ticket", ticketSchema);

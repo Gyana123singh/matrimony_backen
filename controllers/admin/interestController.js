@@ -1,4 +1,5 @@
 const Interest = require("../../models/Interest");
+const User = require("../../models/User");
 
 exports.getAllInterests = async (req, res) => {
   try {
@@ -56,31 +57,44 @@ exports.getAllIgnoredProfiles = async (req, res) => {
 
     const skip = (page - 1) * limit;
 
-    let ignored = await IgnoredProfile.find()
-      .populate("userId", "firstName lastName username profilePhoto")
-      .populate("ignoredUserId", "firstName lastName username profilePhoto")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
+    // Find users who have ignoredProfiles array not empty
+    const usersWithIgnored = await User.find({ ignoredProfiles: { $exists: true, $ne: [] } })
+      .select("firstName lastName username profilePhoto ignoredProfiles")
+      .populate("ignoredProfiles", "firstName lastName username profilePhoto")
+      .sort({ createdAt: -1 });
 
-    // 🔍 search filter
+    // Flatten into pair list: { userId, ignoredUserId }
+    let list = [];
+    usersWithIgnored.forEach((u) => {
+      const userInfo = {
+        _id: u._id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        username: u.username,
+        profilePhoto: u.profilePhoto,
+      };
+
+      (u.ignoredProfiles || []).forEach((ignored) => {
+        list.push({ userId: userInfo, ignoredUserId: ignored });
+      });
+    });
+
+    // Search filter across user or profile
+    let filtered = list;
     if (search) {
-      ignored = ignored.filter((item) => {
-        const user = `${item.userId?.firstName} ${item.userId?.lastName}`.toLowerCase();
-        const profile = `${item.ignoredUserId?.firstName} ${item.ignoredUserId?.lastName}`.toLowerCase();
-
-        return (
-          user.includes(search.toLowerCase()) ||
-          profile.includes(search.toLowerCase())
-        );
+      filtered = list.filter((item) => {
+        const user = `${item.userId?.firstName || ""} ${item.userId?.lastName || ""}`.toLowerCase();
+        const profile = `${item.ignoredUserId?.firstName || ""} ${item.ignoredUserId?.lastName || ""}`.toLowerCase();
+        return user.includes(search.toLowerCase()) || profile.includes(search.toLowerCase());
       });
     }
 
-    const total = await IgnoredProfile.countDocuments();
+    const total = filtered.length;
+    const paged = filtered.slice(skip, skip + Number(limit));
 
     res.status(200).json({
       message: "Ignored profiles fetched",
-      ignoredProfiles: ignored,
+      ignoredProfiles: paged,
       pagination: {
         total,
         page,
