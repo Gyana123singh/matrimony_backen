@@ -13,6 +13,7 @@ const paymentRoutes = require("./paymentRoutes");
 const ticketRoutes = require("./ticketRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
 const settingsRoutes = require("./settingsRoutes");
+const religionRoutes = require("./religionRoutes");
 // Mount routes
 router.use("/auth", authRoutes);
 router.use("/profile", profileRoutes);
@@ -26,5 +27,6 @@ router.use("/payments", paymentRoutes);
 router.use("/tickets", ticketRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/settings", settingsRoutes);
+router.use('/religions', religionRoutes);
 
 module.exports = router;
