@@ -110,14 +110,33 @@ const userSchema = new mongoose.Schema(
 
     education: String,
     fieldOfStudy: String,
+    // Extended personal fields
+    rashi: { type: String, trim: true },
+    weight: Number,
+    motherTongue: { type: String, trim: true },
+    bodyType: {
+      type: String,
+      enum: ["Slim", "Average", "Athletic", "Heavy"],
+    },
+
+    occupationDetails: String,
 
     job: String,
 
     jobLocation: String,
 
+    // Job location extended
+    jobCountry: String,
+    jobState: String,
+    jobCity: String,
+    jobLocationDetails: String,
+
     // Personal location
+    country: String,
+    citizenship: String,
     state: String,
     city: String,
+    nativePlace: String,
 
     annualIncome: String,
 
@@ -131,6 +150,8 @@ const userSchema = new mongoose.Schema(
     // Additional personal details
     presentAddress: String,
     languages: [String],
+    // Also store comma-separated languages when provided from legacy clients
+    languagesString: { type: String, trim: true },
     smoking: {
       type: String,
       enum: ["non-smoker", "occasional", "smoker"],
@@ -164,6 +185,15 @@ const userSchema = new mongoose.Schema(
 
     familyType: String, // joint, nuclear
 
+    // Extended family details
+    familyValues: String,
+    familyStatus: String,
+    ancestralOrigin: String,
+    brothers: { type: Number, default: 0 },
+    brothersMarried: { type: Number, default: 0 },
+    sisters: { type: Number, default: 0 },
+    sistersMarried: { type: Number, default: 0 },
+
     // ================= MEDIA =================
 
     profilePhoto: String,
@@ -174,6 +204,9 @@ const userSchema = new mongoose.Schema(
         uploadedAt: { type: Date, default: Date.now },
       },
     ],
+
+    // Primary images array (stores uploaded image URLs)
+    images: [String],
 
     // ================= PREFERENCES =================
 

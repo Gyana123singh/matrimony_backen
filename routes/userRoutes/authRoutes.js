@@ -13,7 +13,8 @@ const {
 
 const { protect } = require("../../middleware/auth.middleware");
 
-router.post("/register", upload.single("image"), registerUser);
+// Accept single or multiple images (any field name). Controller enforces max 5.
+router.post("/register", upload.any(), registerUser);
 router.post("/login", loginUser);
 router.get("/captcha", generateCaptcha);
 router.post("/send-otp", sendOTP);

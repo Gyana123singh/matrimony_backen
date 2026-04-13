@@ -36,11 +36,44 @@ exports.registerUser = async (req, res) => {
       bloodGroup,
       education,
       fieldOfStudy,
+      // personal
+      rashi,
+      weight,
+      motherTongue,
+      bodyType,
+      languages,
+      // location
+      country,
+      citizenship,
+      state,
+      city,
+      nativePlace,
+      presentAddress,
+      // education
+      educationCategory,
+      educationDetails,
+      college,
+      // career
       job,
+      occupationDetails,
       jobLocation,
       annualIncome,
+      // job location
+      jobCountry,
+      jobState,
+      jobCity,
+      jobLocationDetails,
       religion,
       caste,
+      // family
+      familyValues,
+      familyType,
+      familyStatus,
+      ancestralOrigin,
+      brothers,
+      brothersMarried,
+      sisters,
+      sistersMarried,
       fatherName,
       fatherJob,
       motherName,
@@ -50,10 +83,7 @@ exports.registerUser = async (req, res) => {
       paternalUncleJob,
       maternalUncleName,
       maternalUncleJob,
-      state,
-      city,
-      presentAddress,
-      languages,
+      // misc
       smoking,
       drinking,
     } = req.body;
@@ -86,18 +116,49 @@ exports.registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // ✅ CLOUDINARY IMAGE
+    // Support multiple uploaded images (via multer + cloudinary storage)
     let imageUrl = "";
-    if (req.file) {
+    let photos = [];
+    let imagesArr = [];
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      // Server-side enforce max 5 images
+      if (req.files.length > 5) {
+        return res.status(400).json({ message: "Max 5 images allowed" });
+      }
+      photos = req.files.map((f) => ({ url: f.path }));
+      imagesArr = req.files.map((f) => f.path);
+      imageUrl = req.files[0].path; // first image as profilePhoto
+    } else if (req.file) {
+      // fallback if single file middleware used elsewhere
       imageUrl = req.file.path;
+      photos = [{ url: req.file.path }];
+      imagesArr = [req.file.path];
     }
 
     // Normalize languages: allow comma-separated string
     let languagesArr = [];
+    let languagesString = "";
     if (languages) {
       if (Array.isArray(languages)) languagesArr = languages;
-      else if (typeof languages === "string")
+      else if (typeof languages === "string") {
         languagesArr = languages.split(",").map((s) => s.trim()).filter(Boolean);
+        languagesString = languages;
+      }
     }
+
+    // Basic validations
+    if (weight !== undefined && weight !== null && weight !== "") {
+      const wnum = Number(weight);
+      if (Number.isNaN(wnum)) return res.status(400).json({ message: "Weight must be a number" });
+    }
+    const allowedBodyTypes = ["Slim", "Average", "Athletic", "Heavy"];
+    if (bodyType && !allowedBodyTypes.includes(bodyType)) {
+      return res.status(400).json({ message: "Invalid bodyType" });
+    }
+
+    // Country -> citizenship rule
+    let finalCitizenship = citizenship;
+    if (country === "India") finalCitizenship = "Indian";
 
     const user = new User({
       firstName,
@@ -113,12 +174,19 @@ exports.registerUser = async (req, res) => {
       bloodGroup,
       education,
       fieldOfStudy,
+      rashi,
+      weight: weight ? Number(weight) : undefined,
+      motherTongue,
+      bodyType,
       job,
+      occupationDetails,
       jobLocation,
       annualIncome,
       religion,
       caste,
       profilePhoto: imageUrl,
+      photos,
+      images: imagesArr,
       fatherName,
       fatherJob,
       motherName,
@@ -129,12 +197,34 @@ exports.registerUser = async (req, res) => {
       maternalUncleName,
       maternalUncleJob,
       maritalStatus,
+      country,
+      citizenship: finalCitizenship,
       state,
       city,
+      nativePlace,
       presentAddress,
       languages: languagesArr,
+      languagesString,
       smoking,
       drinking,
+      // education extended
+      educationCategory,
+      educationDetails,
+      college,
+      // job location extended
+      jobCountry,
+      jobState,
+      jobCity,
+      jobLocationDetails,
+      // family extended
+      familyValues,
+      familyType,
+      familyStatus,
+      ancestralOrigin,
+      brothers: brothers ? Number(brothers) : 0,
+      brothersMarried: brothersMarried ? Number(brothersMarried) : 0,
+      sisters: sisters ? Number(sisters) : 0,
+      sistersMarried: sistersMarried ? Number(sistersMarried) : 0,
     });
 
     // ✅ PROFILE COMPLETION LOGIC
