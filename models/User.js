@@ -200,7 +200,15 @@ const userSchema = new mongoose.Schema(
 
     photos: [
       {
-        url: String,
+        url: { type: String, required: true },
+        public_id: { type: String },
+        isProfile: { type: Boolean, default: false },
+        privacy: {
+          type: String,
+          enum: ["public", "protected", "private"],
+          default: "public",
+        },
+        order: { type: Number, default: 0 },
         uploadedAt: { type: Date, default: Date.now },
       },
     ],

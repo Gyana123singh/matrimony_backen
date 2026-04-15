@@ -12,6 +12,7 @@ const initializeSocketEvents = require("./socketEvents/index");
 // ================== ROUTES ==================
 const userRoutes = require("./routes/userRoutes/index");
 const adminRoutes = require("./routes/adminRoutes/index");
+const publicSuccessRoutes = require("./routes/userRoutes/successStoryRoutes");
 const seedAdmin = require("./scripts/adminSeeder");
 
 const app = express();
@@ -64,6 +65,8 @@ app.use(
 
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
+// Public success stories (no auth)
+app.use("/api/success-stories", publicSuccessRoutes);
 // ================== CCAvenue Response ==================
 
 app.post("/api/payments/ccavenue/response", async (req, res) => {

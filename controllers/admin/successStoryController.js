@@ -1,5 +1,7 @@
 const SuccessStory = require("../../models/SuccessStory");
-const cloudinary = require("../../middleware/multerUpload");
+
+// Note: images are uploaded by multer-storage-cloudinary configured in middleware/multerUpload
+// multer will store the uploaded file to Cloudinary and attach file info on `req.file`.
 
 // ================= CREATE =================
 exports.createStory = async (req, res) => {
@@ -7,29 +9,20 @@ exports.createStory = async (req, res) => {
     const { brideName, groomName, description } = req.body;
 
     if (!req.file) {
-      return res.status(400).json({ message: "Images required" });
+      return res.status(400).json({ message: "Image required" });
     }
 
-    // Upload to cloudinary
-    const result = await cloudinary.uploader.upload_stream(
-      { folder: "success_stories" },
-      async (error, result) => {
-        if (error) {
-          return res.status(500).json({ message: "Upload error" });
-        }
+    // multer-storage-cloudinary attaches uploaded file info on req.file
+    const imageUrl = req.file.path || req.file.location || req.file.url || req.file.secure_url;
 
-        const story = await SuccessStory.create({
-          brideName,
-          groomName,
-          description,
-          image: result.secure_url,
-        });
+    const story = await SuccessStory.create({
+      brideName,
+      groomName,
+      description,
+      image: imageUrl,
+    });
 
-        res.status(201).json(story);
-      }
-    );
-
-    result.end(req.file.buffer);
+    res.status(201).json(story);
 
   } catch (error) {
     res.status(500).json({ message: "Create story error" });
@@ -54,20 +47,10 @@ exports.updateStory = async (req, res) => {
 
     let updateData = { brideName, groomName, description };
 
-    // If new image uploaded
+    // If new image uploaded, use the URL provided by multer/cloudinary
     if (req.file) {
-      const result = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "success_stories" },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-        stream.end(req.file.buffer);
-      });
-
-      updateData.image = result.secure_url;
+      const imageUrl = req.file.path || req.file.location || req.file.url || req.file.secure_url;
+      if (imageUrl) updateData.image = imageUrl;
     }
 
     const updated = await SuccessStory.findByIdAndUpdate(id, updateData, {
