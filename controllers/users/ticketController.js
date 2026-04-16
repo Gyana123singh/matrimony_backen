@@ -134,7 +134,7 @@ exports.assignTicket = async (req, res) => {
     const ticket = await Ticket.findByIdAndUpdate(
       id,
       { assignedTo: assignTo },
-      { new: true }
+      { returnDocument: 'after' }
     )
       .populate("userId", "firstName lastName email")
       .populate("assignedTo", "firstName lastName email");

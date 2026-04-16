@@ -134,7 +134,7 @@ const registerAdminEvents = (io, socket) => {
           assignedAt: new Date(),
           status: "assigned",
         },
-        { new: true },
+        { returnDocument: 'after' },
       ).populate("userId", "firstName lastName email");
 
       // Notify all admins
@@ -176,7 +176,7 @@ const registerAdminEvents = (io, socket) => {
           status: "answered",
           updatedAt: new Date(),
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
         .populate("userId", "firstName lastName email")
         .populate("assignedToAdmin", "firstName lastName");
@@ -221,7 +221,7 @@ const registerAdminEvents = (io, socket) => {
           closureReason,
           closedAt: new Date(),
         },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       // Notify ticket creator

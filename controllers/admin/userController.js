@@ -191,7 +191,7 @@ exports.unbanUser = async (req, res) => {
         bannedAt: null,
         isActive: true,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -218,7 +218,7 @@ exports.deactivateUser = async (req, res) => {
       {
         isActive: false,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -245,7 +245,7 @@ exports.activateUser = async (req, res) => {
       {
         isActive: true,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -272,7 +272,7 @@ exports.verifyEmail = async (req, res) => {
       {
         isEmailVerified: true,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -299,7 +299,7 @@ exports.verifyPhone = async (req, res) => {
       {
         isPhoneVerified: true,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -326,7 +326,7 @@ exports.verifyKYC = async (req, res) => {
       {
         isKycVerified: true,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -354,7 +354,7 @@ exports.addNotes = async (req, res) => {
       {
         notes,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {

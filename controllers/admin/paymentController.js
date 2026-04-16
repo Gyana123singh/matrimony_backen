@@ -70,7 +70,7 @@ exports.markPaymentCompleted = async (req, res) => {
       {
         status: "success",
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate("userId", "-password");
 
     if (!payment) {
@@ -117,7 +117,7 @@ exports.refundPayment = async (req, res) => {
       {
         status: "refunded",
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate("userId", "-password");
 
     if (!payment) {

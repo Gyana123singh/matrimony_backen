@@ -66,7 +66,7 @@ const registerMessageEvents = (io, socket) => {
       const message = await Message.findByIdAndUpdate(
         messageId,
         { isRead: true, readAt: new Date() },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       if (message && message.senderId) {

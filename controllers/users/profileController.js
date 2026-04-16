@@ -23,22 +23,54 @@ exports.getUserProfile = async (req, res) => {
       "birthTime",
       "birthName",
       "height",
+      "weight",
+      "rashi",
+      "motherTongue",
+      "bodyType",
+      "nativePlace",
+      "country",
+      "citizenship",
+      "countryOther",
       "complexion",
       "bloodGroup",
       "education",
       "fieldOfStudy",
+      "educationCategory",
+      "educationDetails",
+      "college",
       "job",
       "jobLocation",
+      "employedIn",
+      "occupationDetails",
+      "jobCountry",
+      "jobCountryOther",
+      "jobState",
+      "jobCity",
+      "jobLocationDetails",
       "state",
       "city",
       "annualIncome",
       "religion",
       "caste",
+      "familyValues",
+      "familyType",
+      "familyStatus",
+      "ancestralOrigin",
       "fatherName",
       "motherName",
       "siblings",
+      "brothers",
+      "brothersMarried",
+      "sisters",
+      "sistersMarried",
       "about",
       "hobbies",
+      // new categorized interests
+      "music",
+      "reading",
+      "moviesAndTVShows",
+      "sportsAndFitness",
+      "food",
       "presentAddress",
       "languages",
       "smoking",
@@ -74,6 +106,10 @@ exports.updateUserProfile = async (req, res) => {
 
     const bodyKeys = Object.keys(req.body);
 
+    // Debug: log incoming payload and keys to diagnose filtered fields
+    console.log("[profileController.updateUserProfile] incoming body:", req.body);
+    console.log("[profileController.updateUserProfile] bodyKeys:", bodyKeys);
+
     let updates = {};
 
     // =========================
@@ -92,6 +128,14 @@ exports.updateUserProfile = async (req, res) => {
         "lastName",
         "email",
         "gender",
+        "motherTongue",
+        "bodyType",
+        "weight",
+        "rashi",
+        "nativePlace",
+        "country",
+        "citizenship",
+        "countryOther",
         "religion",
         "caste",
         "dateOfBirth",
@@ -102,22 +146,45 @@ exports.updateUserProfile = async (req, res) => {
         "bloodGroup",
         "education",
         "fieldOfStudy",
+        "educationCategory",
+        "educationDetails",
+        "college",
         "job",
         "jobLocation",
+        "employedIn",
+        "occupationDetails",
+        "jobCountry",
+        "jobCountryOther",
+        "jobState",
+        "jobCity",
+        "jobLocationDetails",
         "state",
         "city",
         "annualIncome",
+        "familyValues",
+        "familyType",
+        "familyStatus",
+        "ancestralOrigin",
         "fatherName",
         "fatherJob",
         "motherName",
         "motherJob",
         "siblings",
+        "brothers",
+        "brothersMarried",
+        "sisters",
+        "sistersMarried",
         "paternalUncleName",
         "paternalUncleJob",
         "maternalUncleName",
         "maternalUncleJob",
         "about",
         "hobbies",
+        "music",
+        "reading",
+        "moviesAndTVShows",
+        "sportsAndFitness",
+        "food",
         "presentAddress",
         "languages",
         "smoking",
@@ -140,6 +207,12 @@ exports.updateUserProfile = async (req, res) => {
           updates[key] = req.body[key];
         }
       });
+
+      // Debug: show which keys passed the whitelist filter
+      console.log(
+        "[profileController.updateUserProfile] filtered updates:",
+        updates,
+      );
     }
 
     // =========================
@@ -166,7 +239,13 @@ exports.updateUserProfile = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: updates },
-      { new: true }
+      { returnDocument: 'after' }
+    );
+
+    // Debug: log DB update result
+    console.log(
+      "[profileController.updateUserProfile] updatedUser:",
+      updatedUser,
     );
 
     // Recompute profile completion after update
@@ -181,25 +260,49 @@ exports.updateUserProfile = async (req, res) => {
         "profilePhoto",
         "gender",
         "dateOfBirth",
+        "motherTongue",
         "birthTime",
         "birthName",
         "height",
+        "weight",
+        "rashi",
+        "bodyType",
         "complexion",
         "bloodGroup",
         "education",
+        "educationCategory",
+        "educationDetails",
+        "college",
         "fieldOfStudy",
         "job",
         "jobLocation",
+        "employedIn",
+        "occupationDetails",
+        "jobCountry",
+        "jobState",
+        "jobCity",
+        "jobLocationDetails",
         "state",
         "city",
         "annualIncome",
         "religion",
         "caste",
+        "familyValues",
+        "familyType",
+        "familyStatus",
+        "ancestralOrigin",
         "fatherName",
         "motherName",
         "siblings",
+        "brothers",
+        "sisters",
         "about",
         "hobbies",
+        "music",
+        "reading",
+        "moviesAndTVShows",
+        "sportsAndFitness",
+        "food",
         "presentAddress",
         "languages",
         "smoking",
@@ -275,7 +378,7 @@ exports.updateFamilyInfo = async (req, res) => {
         familyLocation,
         familyType,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -315,7 +418,7 @@ exports.updatePreferences = async (req, res) => {
         preferredCaste,
         preferredMaritalStatus,
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -350,7 +453,7 @@ exports.addPhotos = async (req, res) => {
         $inc: { remainingUploads: -1 },
         $push: { photos: { url: photoUrl } },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     if (!user) {
@@ -378,7 +481,7 @@ exports.deletePhoto = async (req, res) => {
       {
         $pull: { photos: { _id: photoId } },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -458,7 +561,7 @@ exports.updateNotificationPreferences = async (req, res) => {
           pushNotifications,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({

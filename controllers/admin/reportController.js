@@ -75,7 +75,7 @@ exports.resolveReport = async (req, res) => {
         resolvedByAdmin: adminId,
         resolvedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!report) {
@@ -142,7 +142,7 @@ exports.dismissReport = async (req, res) => {
         resolvedByAdmin: adminId,
         resolvedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!report) {
@@ -242,7 +242,7 @@ exports.assignTicket = async (req, res) => {
         status: "assigned",
         assignedToAdmin: adminId,
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!ticket) {
@@ -344,7 +344,7 @@ exports.closeTicket = async (req, res) => {
         status: "closed",
         closedAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!ticket) {

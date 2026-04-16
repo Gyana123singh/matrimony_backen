@@ -265,7 +265,7 @@ exports.cancelSubscription = async (req, res) => {
         subscriptionStatus: "inactive",
         subscriptionPlan: null,
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.status(200).json({

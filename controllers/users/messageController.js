@@ -290,7 +290,7 @@ exports.markAsRead = async (req, res) => {
         isRead: true,
         readAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     // Emit read confirmation to sender via socket

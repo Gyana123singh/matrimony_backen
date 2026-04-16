@@ -293,7 +293,7 @@ exports.viewProfile = async (req, res) => {
         remainingViews: { $gt: 0 },
       },
       { $inc: { remainingViews: -1 } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!viewer) {
@@ -367,7 +367,7 @@ exports.blockUser = async (req, res) => {
       {
         $addToSet: { blockedUsers: blockedUserId },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -391,7 +391,7 @@ exports.unblockUser = async (req, res) => {
       {
         $pull: { blockedUsers: blockedUserId },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({

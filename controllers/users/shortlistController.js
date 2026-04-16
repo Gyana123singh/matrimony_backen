@@ -17,7 +17,7 @@ exports.addToShortlist = async (req, res) => {
           },
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -41,7 +41,7 @@ exports.removeFromShortlist = async (req, res) => {
       {
         $pull: { shortlist: { userId: profileId } },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({
@@ -97,7 +97,7 @@ exports.ignoreProfile = async (req, res) => {
       {
         $addToSet: { ignoredProfiles: profileId },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).select("-password");
 
     res.status(200).json({

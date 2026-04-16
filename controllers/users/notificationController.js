@@ -46,7 +46,7 @@ exports.markAsRead = async (req, res) => {
         isRead: true,
         readAt: new Date(),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
 
     if (!notification) {

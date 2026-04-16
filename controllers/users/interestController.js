@@ -58,7 +58,7 @@ exports.sendInterest = async (req, res) => {
         remainingInterests: { $gt: 0 },
       },
       { $inc: { remainingInterests: -1 } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updatedSender) {
