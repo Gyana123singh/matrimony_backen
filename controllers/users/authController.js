@@ -23,8 +23,7 @@ const calculateAge = (dob) => {
 exports.registerUser = async (req, res) => {
   try {
     const {
-      firstName,
-      lastName,
+      fullName,
       email,
       password,
       gender,
@@ -54,9 +53,7 @@ exports.registerUser = async (req, res) => {
       educationDetails,
       college,
       // career
-      job,
       occupationDetails,
-      jobLocation,
       annualIncome,
       // job location
       jobCountry,
@@ -141,7 +138,10 @@ exports.registerUser = async (req, res) => {
     if (languages) {
       if (Array.isArray(languages)) languagesArr = languages;
       else if (typeof languages === "string") {
-        languagesArr = languages.split(",").map((s) => s.trim()).filter(Boolean);
+        languagesArr = languages
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         languagesString = languages;
       }
     }
@@ -149,7 +149,8 @@ exports.registerUser = async (req, res) => {
     // Basic validations
     if (weight !== undefined && weight !== null && weight !== "") {
       const wnum = Number(weight);
-      if (Number.isNaN(wnum)) return res.status(400).json({ message: "Weight must be a number" });
+      if (Number.isNaN(wnum))
+        return res.status(400).json({ message: "Weight must be a number" });
     }
     const allowedBodyTypes = ["Slim", "Average", "Athletic", "Heavy"];
     if (bodyType && !allowedBodyTypes.includes(bodyType)) {
@@ -161,8 +162,7 @@ exports.registerUser = async (req, res) => {
     if (country === "India") finalCitizenship = "Indian";
 
     const user = new User({
-      firstName,
-      lastName,
+      fullName,
       email,
       password: hashedPassword,
       gender,
@@ -178,9 +178,7 @@ exports.registerUser = async (req, res) => {
       weight: weight ? Number(weight) : undefined,
       motherTongue,
       bodyType,
-      job,
       occupationDetails,
-      jobLocation,
       annualIncome,
       religion,
       caste,
@@ -222,16 +220,15 @@ exports.registerUser = async (req, res) => {
       familyStatus,
       ancestralOrigin,
       brothers: brothers ? Number(brothers) : 0,
-      brothersMarried: brothersMarried ? Number(brothersMarried) : 0,
+      brothersMarried: brothersMarried || "",
       sisters: sisters ? Number(sisters) : 0,
-      sistersMarried: sistersMarried ? Number(sistersMarried) : 0,
+      sistersMarried: sistersMarried || "",
     });
 
     // ✅ PROFILE COMPLETION LOGIC
     const computeProfileCompleted = (u) => {
       const fields = [
-        "firstName",
-        "lastName",
+        "fullName",
         "email",
         "profilePhoto",
         "gender",
@@ -243,8 +240,7 @@ exports.registerUser = async (req, res) => {
         "bloodGroup",
         "education",
         "fieldOfStudy",
-        "job",
-        "jobLocation",
+
         "state",
         "city",
         "annualIncome",
@@ -377,7 +373,7 @@ exports.loginUser = async (req, res) => {
         role: user.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     const userData = user.toObject();

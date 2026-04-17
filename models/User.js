@@ -4,12 +4,7 @@ const userSchema = new mongoose.Schema(
   {
     // ================= BASIC INFO =================
 
-    firstName: {
-      type: String,
-      required: true,
-    },
-
-    lastName: {
+    fullName: {
       type: String,
       required: true,
     },
@@ -203,9 +198,9 @@ const userSchema = new mongoose.Schema(
     familyStatus: String,
     ancestralOrigin: String,
     brothers: { type: Number, default: 0 },
-    brothersMarried: { type: Number, default: 0 },
+    brothersMarried: { type: String, default: "" },
     sisters: { type: Number, default: 0 },
-    sistersMarried: { type: Number, default: 0 },
+    sistersMarried: { type: String, default: "" },
 
     // ================= MEDIA =================
 
