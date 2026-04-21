@@ -15,7 +15,6 @@ const dashboardRoutes = require("./dashboardRoutes");
 const settingsRoutes = require("./settingsRoutes");
 const religionRoutes = require("./religionRoutes");
 const photoRoutes = require("./photoRoutes");
-const successStoryRoutes = require("./successStoryRoutes");
 // Mount routes
 router.use("/auth", authRoutes);
 router.use("/profile", profileRoutes);
@@ -31,6 +30,5 @@ router.use("/dashboard", dashboardRoutes);
 router.use("/settings", settingsRoutes);
 router.use('/religions', religionRoutes);
 router.use('/photos', photoRoutes);
-router.use('/success-stories', successStoryRoutes);
 
 module.exports = router;

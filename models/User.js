@@ -4,7 +4,12 @@ const userSchema = new mongoose.Schema(
   {
     // ================= BASIC INFO =================
 
-    fullName: {
+    firstName: {
+      type: String,
+      required: true,
+    },
+
+    lastName: {
       type: String,
       required: true,
     },
@@ -105,9 +110,6 @@ const userSchema = new mongoose.Schema(
 
     education: String,
     fieldOfStudy: String,
-    educationCategory: String,
-    educationDetails: String,
-    college: String,
     // Extended personal fields
     rashi: { type: String, trim: true },
     weight: Number,
@@ -122,9 +124,6 @@ const userSchema = new mongoose.Schema(
     job: String,
 
     jobLocation: String,
-
-    // Employment type (e.g., Private Company, Government/Public Sector)
-    employedIn: String,
 
     // Job location extended
     jobCountry: String,
@@ -144,13 +143,6 @@ const userSchema = new mongoose.Schema(
     about: String,
 
     hobbies: [String],
-
-    // Categorized interests
-    music: String,
-    reading: String,
-    moviesAndTVShows: String,
-    sportsAndFitness: String,
-    food: String,
 
     // Lifestyle and contact display
     lifestyle: String,
@@ -198,9 +190,9 @@ const userSchema = new mongoose.Schema(
     familyStatus: String,
     ancestralOrigin: String,
     brothers: { type: Number, default: 0 },
-    brothersMarried: { type: String, default: "" },
+    brothersMarried: { type: Number, default: 0 },
     sisters: { type: Number, default: 0 },
-    sistersMarried: { type: String, default: "" },
+    sistersMarried: { type: Number, default: 0 },
 
     // ================= MEDIA =================
 
