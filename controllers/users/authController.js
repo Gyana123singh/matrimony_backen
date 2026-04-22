@@ -3,6 +3,8 @@ const bcrypt = require("bcryptjs");
 const svgCaptcha = require("svg-captcha");
 const jwt = require("jsonwebtoken");
 const sendSMS = require("../../util/sendSMS");
+const crypto = require("crypto");
+const sendEmail = require("../../util/sendEmail");
 
 // ✅ HELPER FUNCTION (AGE CALCULATION)
 const calculateAge = (dob) => {
@@ -361,12 +363,12 @@ exports.loginUser = async (req, res) => {
       });
     }
 
-    // ✅ ================= SET ONLINE =================
-    user.isOnline = true;
-    user.lastSeen = new Date();
-    user.lastLogin = new Date();
-
-    await user.save();
+    // ✅ ================= SET ONLINE (atomic update to avoid full-document validation) =================
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $set: { isOnline: true, lastSeen: new Date(), lastLoginAt: new Date() } },
+      { new: true },
+    );
 
     // ================= TOKEN =================
     const token = jwt.sign(
@@ -378,7 +380,7 @@ exports.loginUser = async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    const userData = user.toObject();
+    const userData = (updatedUser ? updatedUser.toObject() : user.toObject());
     delete userData.password;
 
     res.status(200).json({
@@ -542,6 +544,84 @@ exports.verifyOTP = async (req, res) => {
     return res.status(500).json({
       message: "OTP verification failed",
     });
+  }
+};
+
+// ================= FORGOT PASSWORD =================
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email required" });
+
+    const user = await User.findOne({ email });
+
+    // Always respond with success message to avoid enumeration
+    if (!user) {
+      return res.json({ message: "If the email exists, a reset link was sent" });
+    }
+
+    // generate token
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          resetPasswordToken: hashedToken,
+          resetPasswordExpires: Date.now() + 60 * 60 * 1000, // 1 hour
+        },
+      },
+    );
+
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password/${resetToken}`;
+
+    const message = `You requested a password reset. Click the link to reset your password:\n\n${resetUrl}\n\nIf you did not request this, ignore this email.`;
+
+    try {
+      await sendEmail(user.email, "Password Reset Request", message);
+    } catch (emailErr) {
+      console.error("Email send failed:", emailErr);
+    }
+
+    return res.json({ message: "If the email exists, a reset link was sent" });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ================= RESET PASSWORD =================
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) return res.status(400).json({ message: "Invalid request" });
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) return res.status(400).json({ message: "Invalid or expired token" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: { password: hashedPassword },
+        $unset: { resetPasswordToken: "", resetPasswordExpires: "" },
+      },
+    );
+
+    return res.json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 // ================= LOGOUT USER =================

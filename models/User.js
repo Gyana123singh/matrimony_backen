@@ -6,7 +6,6 @@ const userSchema = new mongoose.Schema(
 
     fullName: {
       type: String,
-      required: true,
     },
     email: {
       type: String,
@@ -39,6 +38,8 @@ const userSchema = new mongoose.Schema(
     otpExpiry: Date,
     otpRequestedAt: Date,
     otpAttempts: { type: Number, default: 0 },
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
     caste: {
       type: String,
     },

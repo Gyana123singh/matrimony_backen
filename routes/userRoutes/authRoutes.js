@@ -7,6 +7,8 @@ const {
   generateCaptcha,
   sendOTP,
   verifyOTP,
+  forgotPassword,
+  resetPassword,
   logoutUser,
 } = require("../../controllers/users/authController");
 
@@ -19,6 +21,8 @@ router.post("/login", loginUser);
 router.get("/captcha", generateCaptcha);
 router.post("/send-otp", sendOTP);
 router.post("/verify-otp", verifyOTP);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 router.post("/logout", protect, logoutUser);
 
 
