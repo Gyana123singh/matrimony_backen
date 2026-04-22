@@ -1,5 +1,12 @@
 const User = require("../../models/User");
 const bcrypt = require("bcryptjs");
+const Message = require("../../models/Message");
+const Notification = require("../../models/Notification");
+const Interest = require("../../models/Interest");
+const Payment = require("../../models/Payment");
+const Report = require("../../models/Report");
+const Ticket = require("../../models/Ticket");
+const cloudinary = require("../../config/coudinary");
 
 // ================= GET SETTINGS =================
 exports.getSettings = async (req, res) => {
@@ -124,5 +131,68 @@ exports.changePassword = async (req, res) => {
   } catch (error) {
     console.error("changePassword error:", error);
     res.status(500).json({ message: "Password update failed" });
+  }
+};
+
+// ================= DELETE ACCOUNT =================
+exports.deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Attempt to delete any uploaded photos from Cloudinary
+    try {
+      const photos = user.photos || [];
+      for (const p of photos) {
+        if (p && p.public_id) {
+          try {
+            await cloudinary.uploader.destroy(p.public_id);
+          } catch (err) {
+            console.warn("cloudinary destroy failed for", p.public_id, err.message);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Error while removing cloud images", err.message);
+    }
+
+    // Delete related documents
+    await Promise.all([
+      Message.deleteMany({ $or: [{ senderId: userId }, { receiverId: userId }] }),
+      Notification.deleteMany({ $or: [{ userId }, { relatedUserId: userId }] }),
+      Interest.deleteMany({ $or: [{ senderId: userId }, { receiverId: userId }] }),
+      Payment.deleteMany({ userId }),
+      Report.deleteMany({ $or: [{ reportedByUserId: userId }, { reportedUserId: userId }] }),
+      Ticket.deleteMany({ userId }),
+    ]);
+
+    // Remove references to this user from other users
+    // Handle both cases where arrays store objects ({ userId }) or raw ObjectId entries
+    // Simple array pulls
+    await User.updateMany({}, { $pull: { likedUsers: userId, blockedUsers: userId } });
+
+    // matches: could be stored as array of objects or array of ids
+    await User.updateMany({ "matches.userId": { $exists: true } }, { $pull: { matches: { userId } } });
+    await User.updateMany({ matches: userId }, { $pull: { matches: userId } });
+
+    // shortlist: same handling
+    await User.updateMany({ "shortlist.userId": { $exists: true } }, { $pull: { shortlist: { userId } } });
+    await User.updateMany({ shortlist: userId }, { $pull: { shortlist: userId } });
+
+    // visitedProfiles and visitors: may be arrays of objects ({ userId }) or plain ids
+    await User.updateMany({ "visitedProfiles.userId": { $exists: true } }, { $pull: { visitedProfiles: { userId } } });
+    await User.updateMany({ visitedProfiles: userId }, { $pull: { visitedProfiles: userId } });
+    await User.updateMany({ "visitors.userId": { $exists: true } }, { $pull: { visitors: { userId } } });
+    await User.updateMany({ visitors: userId }, { $pull: { visitors: userId } });
+
+    // Finally delete the user
+    await User.deleteOne({ _id: userId });
+
+    res.json({ message: "Account deleted successfully" });
+  } catch (error) {
+    console.error("deleteAccount error:", error);
+    res.status(500).json({ message: "Failed to delete account" });
   }
 };
