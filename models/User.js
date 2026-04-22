@@ -4,16 +4,10 @@ const userSchema = new mongoose.Schema(
   {
     // ================= BASIC INFO =================
 
-    firstName: {
+    fullName: {
       type: String,
       required: true,
     },
-
-    lastName: {
-      type: String,
-      required: true,
-    },
-
     email: {
       type: String,
       required: true,
@@ -120,6 +114,7 @@ const userSchema = new mongoose.Schema(
     },
 
     occupationDetails: String,
+    employedIn: String,
 
     job: String,
 

@@ -55,6 +55,7 @@ exports.registerUser = async (req, res) => {
       // career
       occupationDetails,
       annualIncome,
+      employedIn,
       // job location
       jobCountry,
       jobState,
@@ -177,9 +178,10 @@ exports.registerUser = async (req, res) => {
       rashi,
       weight: weight ? Number(weight) : undefined,
       motherTongue,
-      bodyType,
+      bodyType: bodyType || undefined,
       occupationDetails,
       annualIncome,
+      employedIn,
       religion,
       caste,
       profilePhoto: imageUrl,
