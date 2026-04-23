@@ -124,6 +124,7 @@ exports.updateUserProfile = async (req, res) => {
     // =========================
     else {
       const allowedFields = [
+        "fullName",
         "firstName",
         "lastName",
         "email",
@@ -208,6 +209,52 @@ exports.updateUserProfile = async (req, res) => {
         }
       });
 
+      // Strip empty string values to avoid triggering enum/validation errors
+      Object.keys(updates).forEach((k) => {
+        const v = updates[k];
+        if (typeof v === 'string' && v.trim() === '') {
+          delete updates[k];
+        }
+      });
+
+      // Sanitize numeric fields (family counts, weight, preferred ages)
+      const numericFields = [
+        'brothers',
+        'brothersMarried',
+        'sisters',
+        'sistersMarried',
+        'weight',
+        'preferredMinAge',
+        'preferredMaxAge',
+      ];
+
+      numericFields.forEach((k) => {
+        if (!(k in updates)) return;
+        const raw = updates[k];
+        // normalize common yes/no or boolean-like inputs
+        if (typeof raw === 'string') {
+          const s = raw.trim().toLowerCase();
+          if (['yes', 'y', 'true'].includes(s)) {
+            updates[k] = 1;
+            return;
+          }
+          if (['no', 'n', 'false'].includes(s)) {
+            updates[k] = 0;
+            return;
+          }
+        }
+
+        // attempt numeric conversion
+        const num = Number(raw);
+        if (!Number.isFinite(num)) {
+          // drop invalid numeric fields to avoid CastError
+          delete updates[k];
+        } else {
+          // weight may be fractional, keep as float; others are integers
+          if (k === 'weight') updates[k] = parseFloat(num);
+          else updates[k] = Math.trunc(num);
+        }
+      });
       // Debug: show which keys passed the whitelist filter
       console.log(
         "[profileController.updateUserProfile] filtered updates:",
@@ -325,8 +372,9 @@ exports.updateUserProfile = async (req, res) => {
     try {
       const newCompletion = computeProfileCompleted(updatedUser.toObject());
       if (updatedUser.profileCompleted !== newCompletion) {
-        updatedUser.profileCompleted = newCompletion;
-        await updatedUser.save();
+        // Use targeted update to avoid running full-document validation which
+        // may fail if unrelated fields contain invalid enum/values.
+        await User.findByIdAndUpdate(userId, { $set: { profileCompleted: newCompletion } });
       }
     } catch (e) {
       console.error("Failed to recompute profile completion", e);
