@@ -26,6 +26,8 @@ exports.getPackages = async (req, res) => {
 // ===============================
 exports.createPaymentIntent = async (req, res) => {
   try {
+    const mongoose = require("mongoose"); // ✅ ensure this is available
+
     const userId = req.user._id;
     const { packageId } = req.body;
 
@@ -50,12 +52,14 @@ exports.createPaymentIntent = async (req, res) => {
     const redirect_url = process.env.CCAVENUE_REDIRECT_URL;
     const cancel_url = process.env.CCAVENUE_CANCEL_URL;
 
-    // 🔥 CREATE PAYMENT
-    // 🔥 PARSE BENEFITS → LIMITS
-    const parseBenefits = require("../../util/parseBenefits");
-
+    // 🔥 PARSE BENEFITS
+    const parseBenefits = require("../../utils/parseBenefits"); // ✅ FIX PATH
     const limits = parseBenefits(package.benefits);
 
+    // 🔥 GENERATE ORDER ID FIRST (IMPORTANT)
+    const order_id = "order_" + new mongoose.Types.ObjectId();
+
+    // 🔥 CREATE PAYMENT (WITH ORDER ID)
     const payment = new Payment({
       userId,
       packageId: package._id,
@@ -66,35 +70,16 @@ exports.createPaymentIntent = async (req, res) => {
       duration,
       status: "initiated",
 
-      limits, // ✅ IMPORTANT
+      ccavenueOrderId: order_id, // ✅ FIXED HERE
 
+      limits,
       benefits: package.benefits || [],
     });
 
+    // ✅ SAVE ONLY ONCE
     await payment.save();
 
-    // Emit dashboard update for admins (payment success recorded)
-    try {
-      const io = req.app.get("io");
-      if (io) {
-        io.to("admin:all").emit("dashboard:graphUpdated", {
-          type: "payment:success",
-          payment: {
-            _id: payment._id,
-            amount: payment.amount,
-            createdAt: payment.createdAt,
-          },
-        });
-      }
-    } catch (e) {
-      console.warn("Failed to emit dashboard update on payment confirm:", e);
-    }
-
-    const order_id = `order_${payment._id}`;
-    payment.ccavenueOrderId = order_id;
-    await payment.save();
-
-    // 🔥 PARAM STRING
+    // 🔥 PARAM STRING FOR CCAVENUE
     const params = [
       `merchant_id=${merchant_id}`,
       `order_id=${order_id}`,
@@ -112,13 +97,13 @@ exports.createPaymentIntent = async (req, res) => {
 
     console.log("PARAM STRING:", paramString);
 
-    // ✅ CORRECT ENCRYPTION
     const encRequest = ccav.encrypt(paramString, working_key);
 
     console.log("ENC REQUEST:", encRequest);
 
     return res.status(201).json({
       paymentId: payment._id,
+      orderId: order_id, // ✅ useful for frontend
       ccavenue: {
         access_code,
         encRequest,
