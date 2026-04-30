@@ -4,19 +4,32 @@ const cloudinary = require("../../config/coudinary");
 // Upload photos (multipart - handled by multer/cloudinary storage)
 exports.uploadPhotos = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
     const files = req.files || [];
-    if (!files.length)
-      return res.status(400).json({ message: "No files uploaded" });
+    if (!files.length) return res.status(400).json({ message: "No files uploaded" });
+
+    // Ensure user exists and has enough remainingUploads (atomic)
+    const required = files.length;
+    const updatedUser = await User.findOneAndUpdate(
+      {
+        _id: req.user._id,
+        subscriptionStatus: 'active',
+        subscriptionEndDate: { $gt: new Date() },
+        remainingUploads: { $gte: required },
+      },
+      { $inc: { remainingUploads: -required } },
+      { returnDocument: 'after' }
+    );
+
+    if (!updatedUser) {
+      return res.status(403).json({ message: 'Upgrade required or insufficient upload quota' });
+    }
+
+    const user = updatedUser;
 
     const existingCount = user.photos ? user.photos.length : 0;
     const maxAllowed = 8;
     if (existingCount + files.length > maxAllowed)
-      return res
-        .status(400)
-        .json({ message: `You can upload up to ${maxAllowed} photos` });
+      return res.status(400).json({ message: `You can upload up to ${maxAllowed} photos` });
 
     files.forEach((file, idx) => {
       // multer-storage-cloudinary exposes `path` as URL and `filename` as public_id

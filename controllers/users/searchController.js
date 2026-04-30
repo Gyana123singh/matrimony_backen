@@ -284,20 +284,21 @@ exports.viewProfile = async (req, res) => {
     if (!profile || !profile.isActive || profile.isBanned) {
       return res.status(404).json({ message: "Profile not found" });
     }
-    // Ensure viewer has an active subscription AND remaining views > 0
-    const viewer = await User.findOneAndUpdate(
-      {
-        _id: userId,
-        subscriptionStatus: "active",
-        subscriptionEndDate: { $gt: new Date() },
-        remainingViews: { $gt: 0 },
-      },
-      { $inc: { remainingViews: -1 } },
-      { returnDocument: 'after' }
+    // Determine viewer subscription state but do not force subscription to view basic profile
+    const viewer = await User.findById(userId).select(
+      "subscriptionStatus subscriptionEndDate remainingViews"
     );
 
-    if (!viewer) {
-      return res.status(403).json({ message: "Upgrade required" });
+    const viewerHasActive =
+      viewer &&
+      viewer.subscriptionStatus === "active" &&
+      (!viewer.subscriptionEndDate || new Date() < viewer.subscriptionEndDate);
+
+    // Mask contact details for non-premium viewers
+    const profileObj = profile.toObject();
+    if (profileObj._id.toString() !== userId.toString() && !viewerHasActive) {
+      profileObj.phone = null;
+      profileObj.email = null;
     }
 
     // Add to visitors if not already present
@@ -315,11 +316,51 @@ exports.viewProfile = async (req, res) => {
 
     res.status(200).json({
       message: "Profile retrieved successfully",
-      profile,
-      remainingViews: viewer.remainingViews,
+      profile: profileObj,
+      remainingViews: viewer ? viewer.remainingViews : 0,
     });
   } catch (error) {
     console.error("Error viewing profile:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Unlock contact details (consumes one remaining view)
+exports.unlockContact = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { profileId } = req.params;
+
+    if (userId.toString() === profileId) {
+      return res.status(400).json({ message: "Cannot unlock your own contact" });
+    }
+
+    // Atomically decrement remainingViews by 1 for the viewer
+    const updatedViewer = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        subscriptionStatus: "active",
+        subscriptionEndDate: { $gt: new Date() },
+        remainingViews: { $gt: 0 },
+      },
+      { $inc: { remainingViews: -1 } },
+      { returnDocument: 'after' }
+    );
+
+    if (!updatedViewer) {
+      return res.status(403).json({ message: "Upgrade required" });
+    }
+
+    const profile = await User.findById(profileId).select("phone email firstName lastName");
+    if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+    res.status(200).json({
+      message: "Contact unlocked",
+      contact: { phone: profile.phone, email: profile.email, name: profile.firstName },
+      remainingViews: updatedViewer.remainingViews,
+    });
+  } catch (error) {
+    console.error("unlockContact error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

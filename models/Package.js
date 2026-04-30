@@ -4,37 +4,28 @@ const packageSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-
       unique: true,
+      required: true,
     },
-
-    description: String,
 
     price: {
       type: Number,
-
+      required: true,
     },
-    interestLimit: { type: Number, default: 0 },
-    profileLimit: { type: Number, default: 0 },
-    imageLimit: { type: Number, default: 0 },
-    validity: { type: Number, default: 0 },
+
+    validity: {
+      type: Number,
+      required: true,
+    },
+
     benefits: {
       type: [String],
       default: [],
     },
+
     currency: {
       type: String,
       default: "INR",
-    },
-
-    duration: {
-      type: Number,
-      // in days
-    },
-    features: {
-      contactView: { type: Number, default: 0 },
-      interestExpress: { type: Number, default: 0 },
-      imageUpload: { type: Number, default: 0 },
     },
 
     status: {

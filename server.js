@@ -29,12 +29,12 @@ app.use(
       process.env.NODE_ENV === "production"
         ? "https://marathishubhavivah.com"
         : [
-          "http://localhost:5174",
-          "http://localhost:5173",
-          "http://127.0.0.1:5174",
-          "http://127.0.0.1:5173",
-          "https://marathishubhavivah.com",
-        ],
+            "http://localhost:5174",
+            "http://localhost:5173",
+            "http://127.0.0.1:5174",
+            "http://127.0.0.1:5173",
+            "https://marathishubhavivah.com",
+          ],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
@@ -54,11 +54,10 @@ app.use(
     cookie: {
       secure: process.env.NODE_ENV === "production", // ✅ FIX
       httpOnly: true,
-      sameSite:
-        process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ FIX
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // ✅ FIX
       maxAge: 5 * 60 * 1000,
     },
-  })
+  }),
 );
 
 // ================== ROUTES ==================
@@ -84,15 +83,22 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     console.log("🔓 Decrypted Response:", decrypted);
 
     const response = Object.fromEntries(
-      decrypted.split("&").map((item) => item.split("="))
+      decrypted.split("&").map((item) => item.split("=")),
     );
 
     const order_id = response.order_id;
     const order_status = response.order_status;
-
-    const payment = await Payment.findOne({
+    console.log("ORDER STATUS:", order_status);
+    console.log("ORDER ID:", order_id);
+    let payment = await Payment.findOne({
       ccavenueOrderId: order_id,
     });
+
+    // 🔥 fallback (critical fix)
+    if (!payment && order_id && order_id.includes("order_")) {
+      const id = order_id.replace("order_", "");
+      payment = await Payment.findById(id);
+    }
 
     if (!payment) {
       return res.send("Payment not found");
@@ -100,7 +106,9 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     // Security: validate merchant_param1 matches payment.userId (if present)
     const merchantUserId = response.merchant_param1;
     if (merchantUserId && merchantUserId !== payment.userId.toString()) {
-      console.warn(`Merchant param user mismatch: ${merchantUserId} != ${payment.userId}`);
+      console.warn(
+        `Merchant param user mismatch: ${merchantUserId} != ${payment.userId}`,
+      );
       payment.status = "failed";
       await payment.save();
       return res.send("User mismatch");
@@ -108,16 +116,19 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
     // Idempotency: if payment already marked success, do not re-activate
     if (payment.status === "success") {
-      return res.redirect("https://marathishubhavivah.com/user/payment-success");
+      return res.redirect(
+        "https://marathishubhavivah.com/user/payment-success",
+      );
     }
 
-    if (order_status === "Success") {
+    if (order_status && order_status.toLowerCase() === "success") {
       payment.status = "success";
-      payment.transactionId = response.tracking_id || response.tracking_id || "";
+      payment.transactionId =
+        response.tracking_id || response.tracking_id || "";
 
       const startDate = new Date();
       const endDate = new Date(
-        Date.now() + (payment.duration || 0) * 24 * 60 * 60 * 1000
+        Date.now() + (payment.duration || 0) * 24 * 60 * 60 * 1000,
       );
 
       payment.startDate = startDate;
@@ -132,31 +143,50 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
         subscriptionStartDate: startDate,
         subscriptionEndDate: endDate,
 
-        subscriptionFeatures: payment.features,
         subscriptionBenefits: payment.benefits,
 
-        remainingViews: payment.features.contactViews,
-        remainingInterests: payment.features.interestExpress,
-        remainingUploads: payment.features.imageUploads,
+        remainingViews: payment.limits?.contactViews || 0,
+        remainingInterests: payment.limits?.interestExpress || 0,
+
+        canMessage: payment.limits?.canMessage || false,
+
+        basicSearch: payment.limits?.basicSearch || false,
+        advancedSearch: payment.limits?.advancedSearch || false,
+
+        canViewVisitors: payment.limits?.canViewVisitors || false,
+        canSeeViewers: payment.limits?.canSeeViewers || false,
+
+        priorityListing: payment.limits?.priorityListing || false,
+        topListing: payment.limits?.topListing || false,
+        profileHighlight: payment.limits?.profileHighlight || false,
+
+        whatsappAlerts: payment.limits?.whatsappAlerts || false,
+        support: payment.limits?.support || false,
         $inc: { totalSpent: payment.amount },
       });
 
       // Emit dashboard update for admins (payment success from gateway)
       try {
         if (app && app.get) {
-          const io = app.get('io');
+          const io = app.get("io");
           if (io) {
-            io.to('admin:all').emit('dashboard:graphUpdated', {
-              type: 'payment:success',
-              payment: { _id: payment._id, amount: payment.amount, createdAt: payment.createdAt },
+            io.to("admin:all").emit("dashboard:graphUpdated", {
+              type: "payment:success",
+              payment: {
+                _id: payment._id,
+                amount: payment.amount,
+                createdAt: payment.createdAt,
+              },
             });
           }
         }
       } catch (e) {
-        console.warn('Failed to emit dashboard update in CCAV response:', e);
+        console.warn("Failed to emit dashboard update in CCAV response:", e);
       }
 
-      return res.redirect("https://marathishubhavivah.com/user/payment-success");
+      return res.redirect(
+        "https://marathishubhavivah.com/user/payment-success",
+      );
     } else {
       payment.status = "failed";
       await payment.save();
@@ -203,9 +233,11 @@ try {
       const now = new Date();
       const result = await User.updateMany(
         { subscriptionStatus: "active", subscriptionEndDate: { $lt: now } },
-        { $set: { subscriptionStatus: "expired" } }
+        { $set: { subscriptionStatus: "expired" } },
       );
-      console.log(`Cron: expired subscriptions updated: ${result.modifiedCount}`);
+      console.log(
+        `Cron: expired subscriptions updated: ${result.modifiedCount}`,
+      );
     } catch (err) {
       console.error("Cron job error:", err);
     }

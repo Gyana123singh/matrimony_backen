@@ -70,7 +70,7 @@ exports.markPaymentCompleted = async (req, res) => {
       {
         status: "success",
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     ).populate("userId", "-password");
 
     if (!payment) {
@@ -117,7 +117,7 @@ exports.refundPayment = async (req, res) => {
       {
         status: "refunded",
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     ).populate("userId", "-password");
 
     if (!payment) {
@@ -157,18 +157,14 @@ exports.refundPayment = async (req, res) => {
 // Create package
 exports.createPackage = async (req, res) => {
   try {
-    const {
-      name,
-      price,
-      interestLimit,
-      interestExpress,   // NEW
-      profileLimit,
-      imageLimit,
-      contactView,       // NEW
-      validity,
-      description,       // NEW
-      benefits,
-    } = req.body;
+    const { name, price, validity, benefits } = req.body;
+
+    // Basic validation
+    if (!name || !price || !validity) {
+      return res.status(400).json({
+        message: "Name, price, and validity are required",
+      });
+    }
 
     // Check if package already exists
     const existingPackage = await Package.findOne({ name });
@@ -176,17 +172,15 @@ exports.createPackage = async (req, res) => {
       return res.status(400).json({ message: "Package already exists" });
     }
 
+    // Clean benefits (remove empty values)
+    const cleanBenefits = (benefits || []).filter((b) => b && b.trim() !== "");
+
     const newPackage = new Package({
       name,
       price,
-      interestLimit,
-      interestExpress,
-      profileLimit,
-      imageLimit,
-      contactView,
       validity,
-      description,
-      benefits,
+      benefits: cleanBenefits,
+      isActive: true, // optional default
     });
 
     await newPackage.save();
@@ -220,11 +214,19 @@ exports.getAllPackages = async (req, res) => {
 exports.updatePackage = async (req, res) => {
   try {
     const { packageId } = req.params;
+    const { name, price, validity, benefits } = req.body;
+
+    const cleanBenefits = (benefits || []).filter((b) => b && b.trim() !== "");
 
     const updatedPackage = await Package.findByIdAndUpdate(
       packageId,
-      { ...req.body },
-      { returnDocument: "after", runValidators: true }
+      {
+        name,
+        price,
+        validity,
+        benefits: cleanBenefits,
+      },
+      { returnDocument: "after", runValidators: true },
     );
 
     if (!updatedPackage) {
@@ -395,9 +397,7 @@ exports.getRenewals = async (req, res) => {
       packageName: p.packageName,
       startDate: p.createdAt,
       endDate: new Date(
-        new Date(p.createdAt).setDate(
-          new Date(p.createdAt).getDate() + 30
-        )
+        new Date(p.createdAt).setDate(new Date(p.createdAt).getDate() + 30),
       ), // example validity
       mobile: p.userId?.phone,
     }));

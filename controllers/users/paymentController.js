@@ -4,8 +4,6 @@ const User = require("../../models/User");
 const Notification = require("../../models/Notification");
 const ccav = require("../../util/ccavutil");
 
-
-
 // Get available packages
 exports.getPackages = async (req, res) => {
   try {
@@ -22,7 +20,6 @@ exports.getPackages = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-
 
 // ===============================
 // CREATE PAYMENT INTENT
@@ -54,6 +51,11 @@ exports.createPaymentIntent = async (req, res) => {
     const cancel_url = process.env.CCAVENUE_CANCEL_URL;
 
     // 🔥 CREATE PAYMENT
+    // 🔥 PARSE BENEFITS → LIMITS
+    const parseBenefits = require("../../utils/parseBenefits");
+
+    const limits = parseBenefits(package.benefits);
+
     const payment = new Payment({
       userId,
       packageId: package._id,
@@ -63,11 +65,9 @@ exports.createPaymentIntent = async (req, res) => {
       description: `Subscription to ${package.name}`,
       duration,
       status: "initiated",
-      features: {
-        contactViews: package.features?.contactView || 0,
-        interestExpress: package.features?.interestExpress || 0,
-        imageUploads: package.features?.imageUpload || 0,
-      },
+
+      limits, // ✅ IMPORTANT
+
       benefits: package.benefits || [],
     });
 
@@ -79,7 +79,11 @@ exports.createPaymentIntent = async (req, res) => {
       if (io) {
         io.to("admin:all").emit("dashboard:graphUpdated", {
           type: "payment:success",
-          payment: { _id: payment._id, amount: payment.amount, createdAt: payment.createdAt },
+          payment: {
+            _id: payment._id,
+            amount: payment.amount,
+            createdAt: payment.createdAt,
+          },
         });
       }
     } catch (e) {
@@ -120,7 +124,6 @@ exports.createPaymentIntent = async (req, res) => {
         encRequest,
       },
     });
-
   } catch (error) {
     console.error("❌ Create Payment Error:", error);
     res.status(500).json({ message: "Server error" });
@@ -158,7 +161,7 @@ exports.confirmPayment = async (req, res) => {
 
     const startDate = new Date();
     const endDate = new Date(
-      Date.now() + payment.duration * 24 * 60 * 60 * 1000
+      Date.now() + payment.duration * 24 * 60 * 60 * 1000,
     );
 
     payment.startDate = startDate;
@@ -167,10 +170,10 @@ exports.confirmPayment = async (req, res) => {
     await payment.save();
 
     return res.status(200).json({
-      message: "Payment recorded. Subscription activation will occur via payment gateway response.",
+      message:
+        "Payment recorded. Subscription activation will occur via payment gateway response.",
       payment,
     });
-
   } catch (error) {
     console.error("❌ Confirm Payment Error:", error);
     res.status(500).json({
@@ -179,7 +182,6 @@ exports.confirmPayment = async (req, res) => {
     });
   }
 };
-
 
 // ===============================
 // PAYMENT HISTORY
@@ -221,7 +223,7 @@ exports.getCurrentSubscription = async (req, res) => {
     const userId = req.user._id;
 
     const user = await User.findById(userId).select(
-      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate"
+      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate",
     );
 
     if (!user) {
@@ -265,7 +267,7 @@ exports.cancelSubscription = async (req, res) => {
         subscriptionStatus: "inactive",
         subscriptionPlan: null,
       },
-      { returnDocument: 'after' }
+      { returnDocument: "after" },
     );
 
     res.status(200).json({
@@ -277,4 +279,3 @@ exports.cancelSubscription = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-

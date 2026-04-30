@@ -43,6 +43,7 @@ const paymentSchema = new mongoose.Schema(
     ccavenueOrderId: {
       type: String,
       index: true,
+      required: true,
     },
     transactionId: String,
 
@@ -61,16 +62,28 @@ const paymentSchema = new mongoose.Schema(
     // ============================
     // 🔥 ADD THIS SECTION (MAIN FIX)
     // ============================
+    // ✅ ADD THIS
+    limits: {
+      contactViews: Number,
+      interestExpress: Number,
+      canMessage: Boolean,
 
-    features: {
-      contactViews: { type: Number, default: 0 },
-      interestExpress: { type: Number, default: 0 },
-      imageUploads: { type: Number, default: 0 },
+      basicSearch: Boolean,
+      advancedSearch: Boolean,
+
+      canViewVisitors: Boolean,
+      canSeeViewers: Boolean,
+
+      priorityListing: Boolean,
+      topListing: Boolean,
+      profileHighlight: Boolean,
+
+      whatsappAlerts: Boolean,
+      support: Boolean,
     },
-
     benefits: [{ type: String }],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Payment", paymentSchema);

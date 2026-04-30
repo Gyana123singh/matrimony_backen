@@ -25,7 +25,18 @@ router.use(protect);
 // ✅ FIXED ROUTES (IMPORTANT)
 router.get("/", searchProfiles); // /api/users/search
 router.get("/matches", getMatches); // /api/users/search/matches
-router.get("/profile/:profileId", checkSubscription, viewProfile);
+// Allow viewing a profile (basic info). Contact details require unlocking.
+router.get("/profile/:profileId", viewProfile);
+// Unlock contact details (consumes remainingViews) - requires active subscription
+router.post("/profile/:profileId/unlock", checkSubscription, async (req, res, next) => {
+  // Lazy-load controller to avoid circular requires
+  try {
+    const controller = require("../../controllers/users/searchController");
+    return controller.unlockContact(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+});
 router.get("/visitors", getVisitors);
 router.post("/block", blockUser);
 router.post("/unblock", unblockUser);

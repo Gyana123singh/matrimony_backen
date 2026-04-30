@@ -1,13 +1,8 @@
 const User = require("../models/User");
 
-/**
- * Middleware: checkSubscription
- * - Ensures user has an active, non-expired subscription.
- * - If subscriptionEndDate has passed, marks subscription as expired.
- */
 const checkSubscription = async (req, res, next) => {
   try {
-    const userId = req.user && (req.user._id || req.user.id);
+    const userId = req.user?._id || req.user?.id;
 
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -19,7 +14,12 @@ const checkSubscription = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Auto-expire if end date passed
+    // ❗ check if no subscription at all
+    if (!user.subscriptionStatus || user.subscriptionStatus === "inactive") {
+      return res.status(403).json({ message: "Upgrade required" });
+    }
+
+    // 🔥 expiry check
     if (
       user.subscriptionStatus === "active" &&
       user.subscriptionEndDate &&
@@ -27,14 +27,15 @@ const checkSubscription = async (req, res, next) => {
     ) {
       user.subscriptionStatus = "expired";
       await user.save();
+
       return res.status(403).json({ message: "Subscription expired" });
     }
 
+    // ❗ final check
     if (user.subscriptionStatus !== "active") {
       return res.status(403).json({ message: "Upgrade required" });
     }
 
-    // At this point subscriptionStatus === 'active' and subscriptionEndDate is in future
     next();
   } catch (err) {
     console.error("checkSubscription error:", err);
