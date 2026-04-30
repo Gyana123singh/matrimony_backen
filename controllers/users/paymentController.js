@@ -53,7 +53,7 @@ exports.createPaymentIntent = async (req, res) => {
     const cancel_url = process.env.CCAVENUE_CANCEL_URL;
 
     // 🔥 PARSE BENEFITS
-    const parseBenefits = require("../../utils/parseBenefits"); // ✅ FIX PATH
+    const parseBenefits = require("../../util/parseBenefits"); // ✅ FIX PATH
     const limits = parseBenefits(package.benefits);
 
     // 🔥 GENERATE ORDER ID FIRST (IMPORTANT)
