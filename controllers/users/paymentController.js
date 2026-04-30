@@ -138,9 +138,7 @@ exports.confirmPayment = async (req, res) => {
       return res.status(400).json({ message: "Payment already confirmed" });
     }
 
-    // Update payment record only. Do NOT activate user subscription here.
-    // Activation must happen only from the CCAvenue response endpoint to
-    // avoid duplicate/forged activations.
+    // ✅ mark payment success
     payment.status = "success";
     payment.transactionId = transactionId;
 
@@ -154,9 +152,17 @@ exports.confirmPayment = async (req, res) => {
 
     await payment.save();
 
+    // 🔥🔥 ADD THIS BLOCK (MOST IMPORTANT)
+    await User.findByIdAndUpdate(payment.userId, {
+      subscriptionStatus: "active",
+      subscriptionPlan: payment.packageName,
+      subscriptionStartDate: startDate,
+      subscriptionEndDate: endDate,
+      subscriptionBenefits: payment.benefits || [],
+    });
+
     return res.status(200).json({
-      message:
-        "Payment recorded. Subscription activation will occur via payment gateway response.",
+      message: "Payment successful and subscription activated",
       payment,
     });
   } catch (error) {
@@ -208,7 +214,7 @@ exports.getCurrentSubscription = async (req, res) => {
     const userId = req.user._id;
 
     const user = await User.findById(userId).select(
-      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate",
+      "subscriptionPlan subscriptionStatus subscriptionStartDate subscriptionEndDate subscriptionBenefits",
     );
 
     if (!user) {
@@ -218,6 +224,7 @@ exports.getCurrentSubscription = async (req, res) => {
     // Auto-expire
     if (
       user.subscriptionStatus === "active" &&
+      user.subscriptionEndDate &&
       new Date() > user.subscriptionEndDate
     ) {
       user.subscriptionStatus = "expired";
@@ -231,6 +238,7 @@ exports.getCurrentSubscription = async (req, res) => {
         status: user.subscriptionStatus,
         startDate: user.subscriptionStartDate,
         endDate: user.subscriptionEndDate,
+        benefits: user.subscriptionBenefits || [],
       },
     });
   } catch (error) {
