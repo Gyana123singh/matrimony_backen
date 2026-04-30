@@ -198,6 +198,54 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     res.status(500).send("Error processing payment");
   }
 });
+
+// ================== CCAvenue Cancel ==================
+
+app.post("/api/payments/ccavenue/cancel", async (req, res) => {
+  try {
+    const ccav = require("./utils/ccavutil");
+    const Payment = require("./models/Payment");
+
+    const workingKey = process.env.CCAVENUE_WORKING_KEY;
+    const encResp = req.body.encResp;
+
+    const decrypted = ccav.decrypt(encResp, workingKey);
+
+    console.log("❌ Cancel Decrypted:", decrypted);
+
+    const response = Object.fromEntries(
+      decrypted.split("&").map((item) => item.split("=")),
+    );
+
+    const order_id = response.order_id;
+
+    let payment = await Payment.findOne({
+      ccavenueOrderId: order_id,
+    });
+
+    // fallback (same as success)
+    if (!payment && order_id && order_id.includes("order_")) {
+      const id = order_id.replace("order_", "");
+      payment = await Payment.findById(id);
+    }
+
+    if (!payment) {
+      return res.send("Payment not found");
+    }
+
+    // ✅ mark as failed
+    payment.status = "failed";
+    await payment.save();
+
+    console.log("❌ Payment marked as failed:", payment._id);
+
+    // redirect to frontend
+    return res.redirect("https://marathishubhavivah.com/user/payment-failed");
+  } catch (error) {
+    console.error("❌ Cancel Error:", error);
+    res.status(500).send("Error processing cancel");
+  }
+});
 // ================== HEALTH CHECK ==================
 
 app.get("/", (req, res) => {
