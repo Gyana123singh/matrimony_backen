@@ -52,7 +52,7 @@ exports.createPaymentIntent = async (req, res) => {
 
     // 🔥 CREATE PAYMENT
     // 🔥 PARSE BENEFITS → LIMITS
-    const parseBenefits = require("../../utils/parseBenefits");
+    const parseBenefits = require("../../util/parseBenefits");
 
     const limits = parseBenefits(package.benefits);
 
