@@ -66,6 +66,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 // Public success stories (no auth)
 app.use("/api/success-stories", publicSuccessRoutes);
+
 // ================== CCAvenue Response ==================
 
 app.post("/api/payments/ccavenue/response", async (req, res) => {
@@ -75,9 +76,19 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
     const User = require("./models/User");
 
     const workingKey = process.env.CCAVENUE_WORKING_KEY;
-    const encResp = req.body.encResp;
 
-    // ✅ CORRECT DECRYPTION
+    // ✅ FIX: handle both formats
+    const encResp = req.body.encResp || req.body.enc_response;
+
+    console.log("📦 BODY RECEIVED:", req.body);
+    console.log("🔐 ENC RESP:", encResp);
+
+    if (!encResp) {
+      console.error("❌ encResp missing");
+      return res.send("Invalid payment response");
+    }
+
+    // ✅ decrypt
     const decrypted = ccav.decrypt(encResp, workingKey);
 
     console.log("🔓 Decrypted Response:", decrypted);
@@ -88,43 +99,45 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
     const order_id = response.order_id;
     const order_status = response.order_status;
+
     console.log("ORDER STATUS:", order_status);
     console.log("ORDER ID:", order_id);
+
     let payment = await Payment.findOne({
       ccavenueOrderId: order_id,
     });
 
-    // 🔥 fallback (critical fix)
+    // 🔥 fallback fix
     if (!payment && order_id && order_id.includes("order_")) {
       const id = order_id.replace("order_", "");
       payment = await Payment.findById(id);
     }
 
     if (!payment) {
+      console.error("❌ Payment not found");
       return res.send("Payment not found");
     }
-    // Security: validate merchant_param1 matches payment.userId (if present)
+
+    // 🔒 Security check
     const merchantUserId = response.merchant_param1;
     if (merchantUserId && merchantUserId !== payment.userId.toString()) {
-      console.warn(
-        `Merchant param user mismatch: ${merchantUserId} != ${payment.userId}`,
-      );
+      console.warn(`❌ User mismatch: ${merchantUserId} != ${payment.userId}`);
       payment.status = "failed";
       await payment.save();
       return res.send("User mismatch");
     }
 
-    // Idempotency: if payment already marked success, do not re-activate
+    // 🔁 Prevent duplicate processing
     if (payment.status === "success") {
       return res.redirect(
         "https://marathishubhavivah.com/user/payment-success",
       );
     }
 
+    // ================= SUCCESS =================
     if (order_status && order_status.toLowerCase() === "success") {
       payment.status = "success";
-      payment.transactionId =
-        response.tracking_id || response.tracking_id || "";
+      payment.transactionId = response.tracking_id || "";
 
       const startDate = new Date();
       const endDate = new Date(
@@ -136,14 +149,14 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
       await payment.save();
 
-      // Activate user's subscription ONLY from this trusted response
+      // ✅ Activate user subscription
       await User.findByIdAndUpdate(payment.userId, {
         subscriptionPlan: payment.packageName,
         subscriptionStatus: "active",
         subscriptionStartDate: startDate,
         subscriptionEndDate: endDate,
 
-        subscriptionBenefits: payment.benefits,
+        subscriptionBenefits: payment.benefits || [],
 
         remainingViews: payment.limits?.contactViews || 0,
         remainingInterests: payment.limits?.interestExpress || 0,
@@ -162,34 +175,23 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
         whatsappAlerts: payment.limits?.whatsappAlerts || false,
         support: payment.limits?.support || false,
+
         $inc: { totalSpent: payment.amount },
       });
 
-      // Emit dashboard update for admins (payment success from gateway)
-      try {
-        if (app && app.get) {
-          const io = app.get("io");
-          if (io) {
-            io.to("admin:all").emit("dashboard:graphUpdated", {
-              type: "payment:success",
-              payment: {
-                _id: payment._id,
-                amount: payment.amount,
-                createdAt: payment.createdAt,
-              },
-            });
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to emit dashboard update in CCAV response:", e);
-      }
+      console.log("✅ Payment SUCCESS & Subscription Activated");
 
       return res.redirect(
         "https://marathishubhavivah.com/user/payment-success",
       );
-    } else {
+    }
+
+    // ================= FAILED =================
+    else {
       payment.status = "failed";
       await payment.save();
+
+      console.log("❌ Payment FAILED");
 
       return res.redirect("https://marathishubhavivah.com/user/payment-failed");
     }
