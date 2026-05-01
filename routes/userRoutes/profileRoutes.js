@@ -18,7 +18,6 @@ const {
   viewProfile,
   getVisitors,
   getVisitorStats,
-
 } = require("../../controllers/users/profileController");
 
 const { protect } = require("../../middleware/auth.middleware");
@@ -41,7 +40,7 @@ router.get("/visitors", getVisitorsPage);
 router.post("/visit/:profileId", trackProfileVisit);
 router.post("/view/:id", viewProfile);
 router.get("/:id", getUserById);
-router.get("/get-visitors", getVisitors);
-router.get("/visitor-stats", getVisitorStats);
+router.get("/get-visitors", checkSubscription, getVisitors);
+router.get("/visitor-stats", checkSubscription, getVisitorStats);
 
 module.exports = router;
