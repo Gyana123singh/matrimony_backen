@@ -71,7 +71,7 @@ app.use("/api/success-stories", publicSuccessRoutes);
 
 app.post("/api/payments/ccavenue/response", async (req, res) => {
   try {
-    const ccav = require("./utils/ccavutil");
+    const ccav = require("./util/ccavutil");
     const Payment = require("./models/Payment");
     const User = require("./models/User");
 
@@ -205,7 +205,7 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
 app.post("/api/payments/ccavenue/cancel", async (req, res) => {
   try {
-    const ccav = require("./utils/ccavutil");
+    const ccav = require("./util/ccavutil");
     const Payment = require("./models/Payment");
 
     const workingKey = process.env.CCAVENUE_WORKING_KEY;
