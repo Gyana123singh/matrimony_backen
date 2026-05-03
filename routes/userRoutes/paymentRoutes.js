@@ -8,6 +8,7 @@ const {
   getPaymentHistory,
   getCurrentSubscription,
   cancelSubscription,
+  getAllPackages,
 } = require("../../controllers/users/paymentController");
 
 const { protect } = require("../../middleware/auth.middleware");
@@ -15,13 +16,10 @@ const { protect } = require("../../middleware/auth.middleware");
 // Get packages route (public)
 router.get("/packages", getPackages);
 
-// All other routes require authentication
-router.use(protect);
-
-router.post("/create-intent", createPaymentIntent);
-router.post("/confirm", confirmPayment);
-router.get("/history", getPaymentHistory);
-router.get("/subscription", getCurrentSubscription);
-router.post("/subscription/cancel", cancelSubscription);
+router.post("/create-intent", protect, createPaymentIntent);
+router.post("/confirm", protect, confirmPayment);
+router.get("/history", protect, getPaymentHistory);
+router.get("/subscription", protect, getCurrentSubscription);
+router.post("/subscription/cancel", protect, cancelSubscription);
 
 module.exports = router;

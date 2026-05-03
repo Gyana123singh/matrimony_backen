@@ -75,7 +75,7 @@ exports.resolveReport = async (req, res) => {
         resolvedByAdmin: adminId,
         resolvedAt: new Date(),
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     );
 
     if (!report) {
@@ -142,7 +142,7 @@ exports.dismissReport = async (req, res) => {
         resolvedByAdmin: adminId,
         resolvedAt: new Date(),
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     );
 
     if (!report) {
@@ -185,7 +185,7 @@ exports.getAllTickets = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const tickets = await Ticket.find(query)
-      .populate("userId", "firstName lastName email")
+      .populate("userId", "firstName lastName email profilePhoto")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });
@@ -213,7 +213,7 @@ exports.getTicketDetails = async (req, res) => {
     const { ticketId } = req.params;
 
     const ticket = await Ticket.findById(ticketId)
-      .populate("userId", "-password")
+      .populate("userId", "firstName lastName email profilePhoto")
       .populate("assignedToAdmin", "firstName lastName email");
 
     if (!ticket) {
@@ -242,7 +242,7 @@ exports.assignTicket = async (req, res) => {
         status: "assigned",
         assignedToAdmin: adminId,
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     );
 
     if (!ticket) {
@@ -344,7 +344,7 @@ exports.closeTicket = async (req, res) => {
         status: "closed",
         closedAt: new Date(),
       },
-      { returnDocument: 'after' },
+      { returnDocument: "after" },
     );
 
     if (!ticket) {

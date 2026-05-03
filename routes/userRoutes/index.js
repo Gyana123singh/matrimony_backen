@@ -14,6 +14,7 @@ const ticketRoutes = require("./ticketRoutes");
 const dashboardRoutes = require("./dashboardRoutes");
 const settingsRoutes = require("./settingsRoutes");
 const religionRoutes = require("./religionRoutes");
+const educationRoutes = require("./educationRoutes");
 const photoRoutes = require("./photoRoutes");
 // Mount routes
 router.use("/auth", authRoutes);
@@ -29,6 +30,7 @@ router.use("/tickets", ticketRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/settings", settingsRoutes);
 router.use('/religions', religionRoutes);
+router.use('/educations', educationRoutes);
 router.use('/photos', photoRoutes);
 
 module.exports = router;

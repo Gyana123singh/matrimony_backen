@@ -152,13 +152,33 @@ exports.confirmPayment = async (req, res) => {
 
     await payment.save();
 
-    // 🔥🔥 ADD THIS BLOCK (MOST IMPORTANT)
+    // Activate user subscription and set feature limits from payment.limits
     await User.findByIdAndUpdate(payment.userId, {
       subscriptionStatus: "active",
       subscriptionPlan: payment.packageName,
       subscriptionStartDate: startDate,
       subscriptionEndDate: endDate,
       subscriptionBenefits: payment.benefits || [],
+
+      remainingViews: payment.limits?.contactViews || 0,
+      remainingInterests: payment.limits?.interestExpress || 0,
+
+      canMessage: payment.limits?.canMessage || false,
+
+      basicSearch: payment.limits?.basicSearch || false,
+      advancedSearch: payment.limits?.advancedSearch || false,
+
+      canViewVisitors: payment.limits?.canViewVisitors || false,
+      canSeeViewers: payment.limits?.canSeeViewers || false,
+
+      priorityListing: payment.limits?.priorityListing || false,
+      topListing: payment.limits?.topListing || false,
+      profileHighlight: payment.limits?.profileHighlight || false,
+
+      whatsappAlerts: payment.limits?.whatsappAlerts || false,
+      support: payment.limits?.support || false,
+
+      $inc: { totalSpent: payment.amount },
     });
 
     return res.status(200).json({

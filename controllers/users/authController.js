@@ -21,6 +21,21 @@ const calculateAge = (dob) => {
   return age;
 };
 
+// Helper to parse numeric-ish inputs (numbers, numeric strings, yes/no, booleans)
+const parseNumberOrYesNo = (val) => {
+  if (val === undefined || val === null || val === "") return 0;
+  if (typeof val === "number") return val;
+  if (typeof val === "boolean") return val ? 1 : 0;
+  if (typeof val === "string") {
+    const t = val.trim().toLowerCase();
+    if (t === "yes" || t === "y" || t === "true") return 1;
+    if (t === "no" || t === "n" || t === "false") return 0;
+    const n = Number(t);
+    if (!Number.isNaN(n)) return n;
+  }
+  return 0;
+};
+
 // ================= REGISTER USER =================
 exports.registerUser = async (req, res) => {
   try {
@@ -224,9 +239,9 @@ exports.registerUser = async (req, res) => {
       familyStatus,
       ancestralOrigin,
       brothers: brothers ? Number(brothers) : 0,
-      brothersMarried: brothersMarried || "",
+      brothersMarried: parseNumberOrYesNo(brothersMarried),
       sisters: sisters ? Number(sisters) : 0,
-      sistersMarried: sistersMarried || "",
+      sistersMarried: parseNumberOrYesNo(sistersMarried),
     });
 
     // ✅ PROFILE COMPLETION LOGIC

@@ -5,15 +5,15 @@ const {
   updateAllSettings,
   changePassword,
   deleteAccount,
+  getAbout,
 } = require("../../controllers/users/settingsController");
 
 const { protect } = require("../../middleware/auth.middleware");
 
-router.use(protect);
-
-router.get("/", getSettings);
-router.put("/", updateAllSettings);
-router.put("/change-password", changePassword);
-router.delete("/delete", deleteAccount);
+router.get("/", protect, getSettings);
+router.put("/", protect, updateAllSettings);
+router.put("/change-password", protect, changePassword);
+router.delete("/delete", protect, deleteAccount);
+router.get("/about", getAbout);
 
 module.exports = router;

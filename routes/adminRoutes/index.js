@@ -11,6 +11,7 @@ const intrestRoutes = require("./interestRoutes");
 const successStoryRoutes = require("./successStoryRoutes");
 const ticketRoutes = require("./ticketRoutes");
 const religionRoutes = require("./religionRoutes");
+const educationRoutes = require("./educationRoutes");
 const pagesRoutes = require("./pagesRoutes");
 const settingsRoutes = require("./settingsRoutes");
 
@@ -25,6 +26,7 @@ router.use("/interests", intrestRoutes);
 router.use("/success-stories", successStoryRoutes);
 router.use("/tickets", ticketRoutes);
 router.use("/religions", religionRoutes);
+router.use('/educations', educationRoutes);
 router.use('/pages', pagesRoutes);
 router.use('/settings', settingsRoutes);
 

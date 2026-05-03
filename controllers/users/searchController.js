@@ -30,7 +30,51 @@ exports.searchProfiles = async (req, res) => {
     if (religion) query.religion = religion;
     if (caste) query.caste = caste;
     if (education) query.education = education;
-    if (location) query.jobLocation = new RegExp(location, "i");
+
+    // Support flexible location matching:
+    // - if `location` is provided as a comma separated string (e.g. "State, City"), split and match any part
+    // - also consider explicit `state` and `city` query params when present
+    if (location || req.query.state || req.query.city) {
+      const parts = [];
+      // Prioritize explicit city first
+      if (req.query.city) parts.push(req.query.city.trim());
+      // Then explicit state
+      if (req.query.state) parts.push(req.query.state.trim());
+      // Then any parts from the generic `location` string, but push city-like parts first when possible
+      if (location) {
+        const split = location.split(",").map((s) => s.trim()).filter(Boolean);
+        // if split has 2 parts and looks like [state, city] (common in frontend), push city then state
+        if (split.length === 2) {
+          // try to detect which looks like a city by checking length or presence of spaces (heuristic)
+          const [a, b] = split;
+          // prefer the shorter token or the one containing spaces (more likely city name); but keep both
+          parts.push(b);
+          parts.push(a);
+        } else {
+          parts.push(...split);
+        }
+      }
+
+      // Build unique ordered parts preserving priority (city first)
+      const uniqueParts = [];
+      for (const p of parts) {
+        if (p && !uniqueParts.includes(p)) uniqueParts.push(p);
+      }
+
+      const ors = uniqueParts.flatMap((p) => {
+        const r = new RegExp(p.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&"), "i");
+        return [
+          { city: r },
+          { jobCity: r },
+          { presentAddress: r },
+          { jobLocation: r },
+          { state: r },
+          { jobState: r },
+        ];
+      });
+
+      if (ors.length) query.$or = ors;
+    }
     if (profession) query.job = new RegExp(profession, "i");
     if (maritalStatus) query.maritalStatus = maritalStatus;
     if (smoking) query.smoking = smoking;
@@ -137,7 +181,41 @@ exports.publicSearchProfiles = async (req, res) => {
     if (religion) query.religion = religion;
     if (caste) query.caste = caste;
     if (education) query.education = education;
-    if (location) query.jobLocation = new RegExp(location, "i");
+
+    // Support flexible location matching for public search as well
+    if (location || req.query.state || req.query.city) {
+      const parts = [];
+      if (req.query.city) parts.push(req.query.city.trim());
+      if (req.query.state) parts.push(req.query.state.trim());
+      if (location) {
+        const split = location.split(",").map((s) => s.trim()).filter(Boolean);
+        if (split.length === 2) {
+          parts.push(split[1]);
+          parts.push(split[0]);
+        } else {
+          parts.push(...split);
+        }
+      }
+
+      const uniqueParts = [];
+      for (const p of parts) {
+        if (p && !uniqueParts.includes(p)) uniqueParts.push(p);
+      }
+
+      const ors = uniqueParts.flatMap((p) => {
+        const r = new RegExp(p.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&"), "i");
+        return [
+          { city: r },
+          { jobCity: r },
+          { presentAddress: r },
+          { jobLocation: r },
+          { state: r },
+          { jobState: r },
+        ];
+      });
+
+      if (ors.length) query.$or = ors;
+    }
     if (profession) query.job = new RegExp(profession, "i");
     if (maritalStatus) query.maritalStatus = maritalStatus;
     if (smoking) query.smoking = smoking;

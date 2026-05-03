@@ -18,8 +18,18 @@ const seedAdmin = require("./scripts/adminSeeder");
 const app = express();
 
 // ================== DATABASE ==================
-connectDB();
-seedAdmin();
+// Connect to DB and run seed tasks before starting the server
+let dbInitialized = false;
+const initializeDatabase = async () => {
+  try {
+    await connectDB();
+    await seedAdmin();
+    dbInitialized = true;
+  } catch (err) {
+    console.error("Database initialization failed:", err);
+    process.exit(1);
+  }
+};
 
 // ================== MIDDLEWARES ==================
 
@@ -181,9 +191,37 @@ app.post("/api/payments/ccavenue/response", async (req, res) => {
 
       console.log("✅ Payment SUCCESS & Subscription Activated");
 
-      return res.redirect(
-        "https://marathishubhavivah.com/user/payment-success",
-      );
+        // Create admin notifications and emit socket events
+        try {
+          const Notification = require("./models/Notification");
+          const admins = await User.find({ role: "admin" }).select("_id");
+          const io = req.app.get("io");
+
+          const notifTitle = "New Package Purchase";
+          const notifMessage = `${payment.packageName} purchased by user ${payment.userId}`;
+
+          for (const a of admins) {
+            const n = await Notification.create({
+              userId: a._id,
+              title: notifTitle,
+              message: notifMessage,
+              type: "system",
+              relatedUserId: payment.userId,
+              data: { paymentId: payment._id },
+            });
+
+            if (io) {
+              io.to("admin:all").emit("notification:new", n);
+              io.to(`admin:${a._id}`).emit("notification:new", n);
+            }
+          }
+        } catch (err) {
+          console.error("Error creating admin notifications:", err);
+        }
+
+        return res.redirect(
+          "https://marathishubhavivah.com/user/payment-success",
+        );
     }
 
     // ================= FAILED =================
@@ -280,14 +318,47 @@ try {
   // Run every day at 00:05 server time
   cron.schedule("5 0 * * *", async () => {
     try {
-      const now = new Date();
-      const result = await User.updateMany(
-        { subscriptionStatus: "active", subscriptionEndDate: { $lt: now } },
-        { $set: { subscriptionStatus: "expired" } },
-      );
-      console.log(
-        `Cron: expired subscriptions updated: ${result.modifiedCount}`,
-      );
+        const now = new Date();
+        // Find users whose subscriptions expired
+        const expiredUsers = await User.find({ subscriptionStatus: "active", subscriptionEndDate: { $lt: now } });
+        if (expiredUsers.length === 0) {
+          console.log("Cron: no expired subscriptions found");
+        } else {
+          const Notification = require("./models/Notification");
+          const admins = await User.find({ role: "admin" }).select("_id");
+          const io = app.get("io");
+
+          for (const u of expiredUsers) {
+            u.subscriptionStatus = "expired";
+            await u.save();
+
+            // notify admins for each expired subscription
+            const title = "Subscription Expired";
+            const message = `${u.firstName || u.name || 'User'} (${u.email || u.phone || u._id}) subscription expired`;
+
+            for (const a of admins) {
+              try {
+                const n = await Notification.create({
+                  userId: a._id,
+                  title,
+                  message,
+                  type: "system",
+                  relatedUserId: u._id,
+                  data: { userId: u._id },
+                });
+
+                if (io) {
+                  io.to("admin:all").emit("notification:new", n);
+                  io.to(`admin:${a._id}`).emit("notification:new", n);
+                }
+              } catch (err) {
+                console.error("Error creating/emit notification for expired user:", err);
+              }
+            }
+          }
+
+          console.log(`Cron: expired subscriptions processed: ${expiredUsers.length}`);
+        }
     } catch (err) {
       console.error("Cron job error:", err);
     }
@@ -300,9 +371,12 @@ try {
 
 const PORT = process.env.PORT || 5002;
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`⚡ WebSocket server active`);
+// Start server only after DB initialization
+initializeDatabase().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`⚡ WebSocket server active`);
+  });
 });
 
 module.exports = app;

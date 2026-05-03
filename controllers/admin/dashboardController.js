@@ -88,53 +88,133 @@ exports.getDashboardStats = async (req, res) => {
 // Get dashboard graphs data
 exports.getGraphData = async (req, res) => {
   try {
-    // Users joined over time (last 30 days)
-    const usersJoinedData = await User.aggregate([
-      {
-        $match: {
-          role: "user",
-          createdAt: {
-            $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          },
-        },
-      },
+    // Build 30-day window (including today)
+    const DAYS = 30;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (DAYS - 1));
+
+    // Aggregations for the window
+    const usersCreatedAgg = await User.aggregate([
+      { $match: { role: "user", createdAt: { $gte: start } } },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           count: { $sum: 1 },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
-    // Revenue over time (last 30 days)
-    const revenueData = await Payment.aggregate([
+    const dailyActiveAgg = await User.aggregate([
+      { $match: { role: "user", lastLoginAt: { $gte: start } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$lastLoginAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const bannedAgg = await User.aggregate([
+      { $match: { role: "user", bannedAt: { $gte: start } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$bannedAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const revenueAgg = await Payment.aggregate([
       {
         $match: {
           status: "success",
-          createdAt: {
-            $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          },
+          createdAt: { $gte: start },
         },
       },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           total: { $sum: "$amount" },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
+    // Revenue by package in the window
+    const revenueByPackageAgg = await Payment.aggregate([
+      {
+        $match: {
+          status: "success",
+          createdAt: { $gte: start },
+        },
+      },
+      {
+        $group: {
+          _id: "$packageName",
+          total: { $sum: "$amount" },
+        },
+      },
+      { $sort: { total: -1 } },
+    ]);
+
+    // Pre-counts before start for cumulative totals
+    const totalBefore = await User.countDocuments({ role: "user", createdAt: { $lt: start } });
+    const bannedBefore = await User.countDocuments({ role: "user", isBanned: true, bannedAt: { $lt: start } });
+
+    // Map results for quick lookup
+    const createdMap = {};
+    usersCreatedAgg.forEach((r) => (createdMap[r._id] = r.count));
+
+    const activeMap = {};
+    dailyActiveAgg.forEach((r) => (activeMap[r._id] = r.count));
+
+    const bannedMap = {};
+    bannedAgg.forEach((r) => (bannedMap[r._id] = r.count));
+
+    const revenueMap = {};
+    revenueAgg.forEach((r) => (revenueMap[r._id] = r.total));
+
+    // Build timeseries array
+    const timeseries = [];
+    let runningTotal = totalBefore || 0;
+    let runningBanned = bannedBefore || 0;
+
+    for (let i = 0; i < DAYS; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+
+      const newUsers = createdMap[key] || 0;
+      runningTotal += newUsers;
+
+      const activeUsers = activeMap[key] || 0;
+      const newBanned = bannedMap[key] || 0;
+      runningBanned += newBanned;
+
+      const revenue = revenueMap[key] || 0;
+
+      timeseries.push({
+        date: key,
+        newUsers,
+        totalUsers: runningTotal,
+        activeUsers,
+        newBanned,
+        totalBanned: runningBanned,
+        revenue,
+      });
+    }
+
     res.status(200).json({
       message: "Graph data retrieved successfully",
       data: {
-        usersJoined: usersJoinedData,
-        revenue: revenueData,
+        usersJoined: usersCreatedAgg,
+        revenue: revenueAgg,
+        revenueByPackage: revenueByPackageAgg.map((r) => ({ packageName: r._id, total: r.total })),
+        timeseries,
       },
     });
   } catch (error) {

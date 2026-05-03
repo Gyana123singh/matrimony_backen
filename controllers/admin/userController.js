@@ -60,7 +60,11 @@ exports.getUserDetails = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await User.findById(userId).select("-password");
+    const user = await User.findById(userId)
+      .select("-password")
+      .populate({ path: "shortlist.userId", select: "firstName lastName profilePhoto image" })
+      .populate({ path: "matches.userId", select: "firstName lastName profilePhoto image" })
+      .populate({ path: "visitors.userId", select: "firstName lastName profilePhoto image" });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -390,3 +394,4 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
