@@ -239,9 +239,9 @@ exports.registerUser = async (req, res) => {
       familyStatus,
       ancestralOrigin,
       brothers: brothers ? Number(brothers) : 0,
-      brothersMarried: parseNumberOrYesNo(brothersMarried),
+      brothersMarried: brothersMarried ? String(brothersMarried) : "",
       sisters: sisters ? Number(sisters) : 0,
-      sistersMarried: parseNumberOrYesNo(sistersMarried),
+      sistersMarried: sistersMarried ? String(sistersMarried) : "",
     });
 
     // ✅ PROFILE COMPLETION LOGIC

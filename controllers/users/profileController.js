@@ -60,9 +60,7 @@ exports.getUserProfile = async (req, res) => {
       "motherName",
       "siblings",
       "brothers",
-      "brothersMarried",
       "sisters",
-      "sistersMarried",
       "about",
       "hobbies",
       // new categorized interests
@@ -220,9 +218,7 @@ exports.updateUserProfile = async (req, res) => {
       // Sanitize numeric fields (family counts, weight, preferred ages)
       const numericFields = [
         'brothers',
-        'brothersMarried',
         'sisters',
-        'sistersMarried',
         'weight',
         'preferredMinAge',
         'preferredMaxAge',
