@@ -154,6 +154,7 @@ const userSchema = new mongoose.Schema(
     contactDisplay: String, // e.g., 'public', 'onlyPremium', 'private'
     // Additional personal details
     presentAddress: String,
+    zipCode: String,
     languages: [String],
     // Also store comma-separated languages when provided from legacy clients
     languagesString: { type: String, trim: true },

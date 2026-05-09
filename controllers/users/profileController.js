@@ -27,7 +27,7 @@ exports.getUserProfile = async (req, res) => {
 
     const missingFields = [];
     const uObj = user.toObject();
-    
+
     completionFields.forEach((f) => {
       const v = uObj[f];
       if (v === undefined || v === null || (typeof v === 'string' && v.trim() === "") || (Array.isArray(v) && v.length === 0)) {
