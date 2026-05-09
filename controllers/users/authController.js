@@ -42,6 +42,7 @@ exports.registerUser = async (req, res) => {
     const {
       fullName,
       email,
+      phone,
       password,
       gender,
       dateOfBirth,
@@ -50,10 +51,14 @@ exports.registerUser = async (req, res) => {
       height,
       complexion,
       bloodGroup,
-      education,
-      fieldOfStudy,
-      // personal
+
+      job,
       rashi,
+      about,
+      hobbies,
+      preferredGender,
+      preferredMinAge,
+      preferredMaxAge,
       weight,
       motherTongue,
       bodyType,
@@ -164,6 +169,18 @@ exports.registerUser = async (req, res) => {
       }
     }
 
+    // Normalize hobbies: allow comma-separated string
+    let hobbiesArr = [];
+    if (hobbies) {
+      if (Array.isArray(hobbies)) hobbiesArr = hobbies;
+      else if (typeof hobbies === "string") {
+        hobbiesArr = hobbies
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+    }
+
     // Basic validations
     if (weight !== undefined && weight !== null && weight !== "") {
       const wnum = Number(weight);
@@ -190,9 +207,14 @@ exports.registerUser = async (req, res) => {
       height,
       complexion,
       bloodGroup,
-      education,
-      fieldOfStudy,
+
+      job,
       rashi,
+      about,
+      phone,
+      preferredGender,
+      preferredMinAge: preferredMinAge ? Number(preferredMinAge) : undefined,
+      preferredMaxAge: preferredMaxAge ? Number(preferredMaxAge) : undefined,
       weight: weight ? Number(weight) : undefined,
       motherTongue,
       bodyType: bodyType || undefined,
@@ -222,6 +244,7 @@ exports.registerUser = async (req, res) => {
       presentAddress,
       languages: languagesArr,
       languagesString,
+      hobbies: hobbiesArr,
       smoking,
       drinking,
       // education extended
@@ -257,9 +280,9 @@ exports.registerUser = async (req, res) => {
         "height",
         "complexion",
         "bloodGroup",
-        "education",
-        "fieldOfStudy",
-
+        "educationCategory",
+        "educationDetails",
+        "college",
         "state",
         "city",
         "annualIncome",
@@ -269,7 +292,6 @@ exports.registerUser = async (req, res) => {
         "motherName",
         "siblings",
         "about",
-        "hobbies",
         "presentAddress",
         "languages",
         "smoking",

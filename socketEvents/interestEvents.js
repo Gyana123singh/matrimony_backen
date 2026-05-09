@@ -36,7 +36,7 @@ const registerInterestEvents = (io, socket) => {
       io.to(`user:${receiverId}`).emit("interest:received", {
         _id: interest._id,
         senderId,
-        senderName: (await User.findById(senderId))?.firstName,
+        senderName: (await User.findById(senderId))?.fullName,
         message,
         receivedAt: interest.sentAt,
       });
@@ -69,7 +69,7 @@ const registerInterestEvents = (io, socket) => {
       // Notify sender that interest was accepted
       io.to(`user:${senderId}`).emit("match:created", {
         matchedWith: receiverId,
-        matchedWithName: (await User.findById(receiverId))?.firstName,
+        matchedWithName: (await User.findById(receiverId))?.fullName,
         interestId,
       });
 
@@ -125,7 +125,7 @@ const registerInterestEvents = (io, socket) => {
         receiver: userId,
         status: "pending",
       })
-        .populate("sender", "firstName lastName profilePhoto age gender")
+        .populate("sender", "fullName profilePhoto age gender")
         .sort({ sentAt: -1 });
 
       socket.emit("interest:pendingList", {
@@ -148,7 +148,7 @@ const registerInterestEvents = (io, socket) => {
       const interests = await Interest.find({
         sender: userId,
       })
-        .populate("receiver", "firstName lastName profilePhoto age gender")
+        .populate("receiver", "fullName profilePhoto age gender")
         .sort({ sentAt: -1 });
 
       socket.emit("interest:sentList", {

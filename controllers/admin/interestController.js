@@ -59,8 +59,8 @@ exports.getAllIgnoredProfiles = async (req, res) => {
 
     // Find users who have ignoredProfiles array not empty
     const usersWithIgnored = await User.find({ ignoredProfiles: { $exists: true, $ne: [] } })
-      .select("firstName lastName username profilePhoto ignoredProfiles")
-      .populate("ignoredProfiles", "firstName lastName username profilePhoto")
+      .select("fullName username profilePhoto ignoredProfiles")
+      .populate("ignoredProfiles", "fullName username profilePhoto")
       .sort({ createdAt: -1 });
 
     // Flatten into pair list: { userId, ignoredUserId }
@@ -68,8 +68,7 @@ exports.getAllIgnoredProfiles = async (req, res) => {
     usersWithIgnored.forEach((u) => {
       const userInfo = {
         _id: u._id,
-        firstName: u.firstName,
-        lastName: u.lastName,
+        fullName: u.fullName,
         username: u.username,
         profilePhoto: u.profilePhoto,
       };
@@ -83,8 +82,8 @@ exports.getAllIgnoredProfiles = async (req, res) => {
     let filtered = list;
     if (search) {
       filtered = list.filter((item) => {
-        const user = `${item.userId?.firstName || ""} ${item.userId?.lastName || ""}`.toLowerCase();
-        const profile = `${item.ignoredUserId?.firstName || ""} ${item.ignoredUserId?.lastName || ""}`.toLowerCase();
+        const user = (item.userId?.fullName || "").toLowerCase();
+        const profile = (item.ignoredUserId?.fullName || "").toLowerCase();
         return user.includes(search.toLowerCase()) || profile.includes(search.toLowerCase());
       });
     }

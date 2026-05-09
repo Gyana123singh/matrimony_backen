@@ -12,7 +12,7 @@ exports.getNotifications = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const notifications = await Notification.find(query)
-      .populate("relatedUserId", "firstName lastName profilePhoto")
+      .populate("relatedUserId", "fullName profilePhoto")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });

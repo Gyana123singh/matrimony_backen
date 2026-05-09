@@ -12,83 +12,40 @@ exports.getUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // compute missing fields for clarity
-    const fieldsToCheck = [
-      "firstName",
-      "lastName",
-      "email",
-      "profilePhoto",
-      "gender",
-      "dateOfBirth",
-      "birthTime",
-      "birthName",
-      "height",
-      "weight",
-      "rashi",
-      "motherTongue",
-      "bodyType",
-      "nativePlace",
-      "country",
-      "citizenship",
-      "countryOther",
-      "complexion",
-      "bloodGroup",
-      "education",
-      "fieldOfStudy",
-      "educationCategory",
-      "educationDetails",
-      "college",
-      "job",
-      "jobLocation",
-      "employedIn",
-      "occupationDetails",
-      "jobCountry",
-      "jobCountryOther",
-      "jobState",
-      "jobCity",
-      "jobLocationDetails",
-      "state",
-      "city",
-      "annualIncome",
-      "religion",
-      "caste",
-      "familyValues",
-      "familyType",
-      "familyStatus",
-      "ancestralOrigin",
-      "fatherName",
-      "motherName",
-      "siblings",
-      "brothers",
-      "sisters",
-      "about",
-      "hobbies",
-      // new categorized interests
-      "music",
-      "reading",
-      "moviesAndTVShows",
-      "sportsAndFitness",
-      "food",
-      "presentAddress",
-      "languages",
-      "smoking",
-      "drinking",
-      "phone",
-      "lifestyle",
+    // Define core fields required for profile completion (total: 35)
+    const completionFields = [
+      "fullName", "email", "phone", "profilePhoto",
+      "gender", "dateOfBirth", "maritalStatus", "height", "weight",
+      "motherTongue", "nativePlace", "country", "state", "city",
+      "religion", "caste",
+      "educationCategory", "educationDetails", "college",
+      "job", "employedIn", "jobLocation", "annualIncome",
+      "familyType", "familyStatus", "familyValues", "fatherName", "motherName",
+      "about", "languages", "lifestyle",
+      "preferredGender", "preferredMinAge", "preferredMaxAge"
     ];
 
     const missingFields = [];
     const uObj = user.toObject();
-    fieldsToCheck.forEach((f) => {
+    
+    completionFields.forEach((f) => {
       const v = uObj[f];
-      if (v === undefined || v === null || String(v).trim() === "") {
+      if (v === undefined || v === null || (typeof v === 'string' && v.trim() === "") || (Array.isArray(v) && v.length === 0)) {
         missingFields.push(f);
       }
     });
 
+    // Recompute on the fly
+    const profileCompleted = Math.round(((completionFields.length - missingFields.length) / completionFields.length) * 100);
+
+    // Persist to DB if different
+    if (user.profileCompleted !== profileCompleted) {
+      await User.findByIdAndUpdate(userId, { $set: { profileCompleted } });
+    }
+
     res.status(200).json({
       message: "Profile retrieved successfully",
-      user,
+      user: { ...uObj, profileCompleted },
       missingFields,
     });
   } catch (error) {
@@ -123,8 +80,6 @@ exports.updateUserProfile = async (req, res) => {
     else {
       const allowedFields = [
         "fullName",
-        "firstName",
-        "lastName",
         "email",
         "gender",
         "motherTongue",
@@ -143,8 +98,7 @@ exports.updateUserProfile = async (req, res) => {
         "height",
         "complexion",
         "bloodGroup",
-        "education",
-        "fieldOfStudy",
+
         "educationCategory",
         "educationDetails",
         "college",
@@ -293,71 +247,22 @@ exports.updateUserProfile = async (req, res) => {
 
     // Recompute profile completion after update
     const computeProfileCompleted = (u) => {
-      // Note: `contactDisplay` was removed from UI and should not be
-      // considered in completion calculation. Birth time/name may be
-      // optional for many users but are still counted here if provided.
       const fields = [
-        "firstName",
-        "lastName",
-        "email",
-        "profilePhoto",
-        "gender",
-        "dateOfBirth",
-        "motherTongue",
-        "birthTime",
-        "birthName",
-        "height",
-        "weight",
-        "rashi",
-        "bodyType",
-        "complexion",
-        "bloodGroup",
-        "education",
-        "educationCategory",
-        "educationDetails",
-        "college",
-        "fieldOfStudy",
-        "job",
-        "jobLocation",
-        "employedIn",
-        "occupationDetails",
-        "jobCountry",
-        "jobState",
-        "jobCity",
-        "jobLocationDetails",
-        "state",
-        "city",
-        "annualIncome",
-        "religion",
-        "caste",
-        "familyValues",
-        "familyType",
-        "familyStatus",
-        "ancestralOrigin",
-        "fatherName",
-        "motherName",
-        "siblings",
-        "brothers",
-        "sisters",
-        "about",
-        "hobbies",
-        "music",
-        "reading",
-        "moviesAndTVShows",
-        "sportsAndFitness",
-        "food",
-        "presentAddress",
-        "languages",
-        "smoking",
-        "drinking",
-        "phone",
-        "lifestyle",
+        "fullName", "email", "phone", "profilePhoto",
+        "gender", "dateOfBirth", "maritalStatus", "height", "weight",
+        "motherTongue", "nativePlace", "country", "state", "city",
+        "religion", "caste",
+        "educationCategory", "college",
+        "job", "employedIn", "jobLocation", "annualIncome",
+        "familyType", "familyStatus", "familyValues", "fatherName", "motherName",
+        "about", "hobbies", "languages", "lifestyle",
+        "preferredGender", "preferredMinAge", "preferredMaxAge"
       ];
 
       let filled = 0;
       fields.forEach((f) => {
         const v = u[f];
-        if (v !== undefined && v !== null && String(v).trim() !== "") {
+        if (v !== undefined && v !== null && (typeof v !== 'string' || v.trim() !== "") && (!Array.isArray(v) || v.length > 0)) {
           filled += 1;
         }
       });
@@ -368,9 +273,8 @@ exports.updateUserProfile = async (req, res) => {
     try {
       const newCompletion = computeProfileCompleted(updatedUser.toObject());
       if (updatedUser.profileCompleted !== newCompletion) {
-        // Use targeted update to avoid running full-document validation which
-        // may fail if unrelated fields contain invalid enum/values.
         await User.findByIdAndUpdate(userId, { $set: { profileCompleted: newCompletion } });
+        updatedUser.profileCompleted = newCompletion;
       }
     } catch (e) {
       console.error("Failed to recompute profile completion", e);
@@ -650,7 +554,7 @@ exports.getUserDashboard = async (req, res) => {
       receiverId: userId,
       status: "pending",
     })
-      .populate("senderId", "firstName lastName profilePhoto job jobLocation")
+      .populate("senderId", "fullName profilePhoto job jobLocation")
       .sort({ createdAt: -1 })
       .limit(5);
 
@@ -868,7 +772,7 @@ exports.viewProfile = async (req, res) => {
 exports.getVisitors = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .populate("visitors.userId", "firstName lastName profilePhoto jobLocation");
+      .populate("visitors.userId", "fullName profilePhoto jobLocation");
 
     res.json(user.visitors);
   } catch (err) {

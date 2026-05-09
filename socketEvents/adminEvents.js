@@ -32,8 +32,8 @@ const registerAdminEvents = (io, socket) => {
       const { reportId, reportedUserId, reportedByUserId, reason } = data;
 
       const report = await Report.findById(reportId)
-        .populate("reportedUserId", "firstName lastName profilePhoto")
-        .populate("reportedByUserId", "firstName lastName");
+        .populate("reportedUserId", "fullName profilePhoto")
+        .populate("reportedByUserId", "fullName");
 
       // Broadcast to all admins
       io.to("admin:all").emit("report:new", {

@@ -23,8 +23,7 @@ exports.getAllUsers = async (req, res) => {
 
     if (search) {
       query.$or = [
-        { firstName: new RegExp(search, "i") },
-        { lastName: new RegExp(search, "i") },
+        { fullName: new RegExp(search, "i") },
         { email: new RegExp(search, "i") },
         { phone: new RegExp(search, "i") },
       ];
@@ -62,9 +61,9 @@ exports.getUserDetails = async (req, res) => {
 
     const user = await User.findById(userId)
       .select("-password")
-      .populate({ path: "shortlist.userId", select: "firstName lastName profilePhoto image" })
-      .populate({ path: "matches.userId", select: "firstName lastName profilePhoto image" })
-      .populate({ path: "visitors.userId", select: "firstName lastName profilePhoto image" });
+      .populate({ path: "shortlist.userId", select: "fullName profilePhoto image" })
+      .populate({ path: "matches.userId", select: "fullName profilePhoto image" })
+      .populate({ path: "visitors.userId", select: "fullName profilePhoto image" });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });

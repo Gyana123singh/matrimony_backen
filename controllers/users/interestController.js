@@ -2,6 +2,20 @@ const Interest = require("../../models/Interest");
 const User = require("../../models/User");
 const Notification = require("../../models/Notification");
 
+// ================= HELPERS =================
+const calculateAge = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+
 // Send interest
 exports.sendInterest = async (req, res) => {
   try {
@@ -74,7 +88,7 @@ exports.sendInterest = async (req, res) => {
 
     await Notification.create({
       userId: receiverId,
-      title: `${updatedSender.firstName} sent you an interest`,
+      title: `${updatedSender.fullName} sent you an interest`,
       message: "Check your interests",
       type: "interest",
       relatedUserId: senderId,
@@ -113,9 +127,22 @@ exports.getReceivedInterests = async (req, res) => {
 
     const total = await Interest.countDocuments(query);
 
+    const formatted = interests.map((i) => {
+      if (i.senderId && i.senderId.dateOfBirth) {
+        return {
+          ...i.toObject(),
+          senderId: {
+            ...i.senderId.toObject(),
+            age: calculateAge(i.senderId.dateOfBirth),
+          },
+        };
+      }
+      return i;
+    });
+
     res.status(200).json({
       message: "Interests retrieved successfully",
-      interests,
+      interests: formatted,
       pagination: {
         total,
         page,
@@ -151,9 +178,22 @@ exports.getSentInterests = async (req, res) => {
 
     const total = await Interest.countDocuments(query);
 
+    const formatted = interests.map((i) => {
+      if (i.receiverId && i.receiverId.dateOfBirth) {
+        return {
+          ...i.toObject(),
+          receiverId: {
+            ...i.receiverId.toObject(),
+            age: calculateAge(i.receiverId.dateOfBirth),
+          },
+        };
+      }
+      return i;
+    });
+
     res.status(200).json({
       message: "Sent interests retrieved successfully",
-      interests,
+      interests: formatted,
       pagination: {
         total,
         page,
@@ -219,7 +259,7 @@ exports.acceptInterest = async (req, res) => {
       if (io) {
         io.to(`user:${interest.senderId}`).emit('match:created', {
           matchedWith: interest.receiverId,
-          matchedWithName: (await User.findById(interest.receiverId))?.firstName,
+          matchedWithName: (await User.findById(interest.receiverId))?.fullName,
           interestId: interest._id,
         })
       }

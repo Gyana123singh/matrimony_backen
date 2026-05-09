@@ -1,6 +1,20 @@
 const User = require("../../models/User");
 const Report = require("../../models/Report");
 
+// ================= HELPERS =================
+const calculateAge = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+
 // Add to shortlist
 exports.addToShortlist = async (req, res) => {
   try {
@@ -71,9 +85,22 @@ exports.getShortlist = async (req, res) => {
 
     const shortlist = user.shortlist.slice((page - 1) * limit, page * limit);
 
+    const formatted = shortlist.map((item) => {
+      if (item.userId && item.userId.dateOfBirth) {
+        return {
+          ...item.toObject(),
+          userId: {
+            ...item.userId.toObject(),
+            age: calculateAge(item.userId.dateOfBirth),
+          },
+        };
+      }
+      return item;
+    });
+
     res.status(200).json({
       message: "Shortlist retrieved successfully",
-      shortlist,
+      shortlist: formatted,
       pagination: {
         total: user.shortlist.length,
         page,

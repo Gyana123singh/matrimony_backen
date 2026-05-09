@@ -104,8 +104,8 @@ exports.getMessages = async (req, res) => {
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 })
-      .populate("senderId", "firstName lastName profilePhoto")
-      .populate("receiverId", "firstName lastName profilePhoto");
+      .populate("senderId", "fullName profilePhoto")
+      .populate("receiverId", "fullName profilePhoto");
 
     const total = await Message.countDocuments(query);
 

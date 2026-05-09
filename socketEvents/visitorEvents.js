@@ -21,7 +21,7 @@ const registerVisitorEvents = (io, socket) => {
       // Notify profile owner
       io.to(`user:${profileOwnerId}`).emit("visitor:new", {
         visitorId: viewerId,
-        visitorName: (await User.findById(viewerId))?.firstName,
+        visitorName: (await User.findById(viewerId))?.fullName,
         viewedAt: new Date(),
       });
 

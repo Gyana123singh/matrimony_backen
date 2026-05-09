@@ -160,7 +160,7 @@ Authorization: Bearer <your_jwt_token>
 
 - Basic Info: firstName, lastName, email, phone, password
 - Profile: gender, dateOfBirth, profilePhoto, photos
-- Personal Details: height, complexion, bloodGroup, religion, caste, maritalStatus, education, job, etc.
+- Personal Details: height, complexion, bloodGroup, religion, caste, maritalStatus, job, etc.
 - Family: fatherName, fatherJob, motherName, siblings, etc.
 - Preferences: preferredGender, preferredAge, preferredReligion, etc.
 - Status: isActive, isEmailVerified, isPhoneVerified, isKycVerified

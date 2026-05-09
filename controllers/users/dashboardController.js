@@ -2,6 +2,20 @@ const User = require("../../models/User");
 const Interest = require("../../models/Interest");
 const Message = require("../../models/Message");
 
+// ================= HELPERS =================
+const calculateAge = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+
 // ================= DASHBOARD STATS =================
 
 exports.getUserProfile = async (req, res) => {
@@ -10,7 +24,7 @@ exports.getUserProfile = async (req, res) => {
 
     res.json({
       _id: user._id,
-      name: `${user.firstName} ${user.lastName}`,
+      name: user.fullName,
       email: user.email,
 
       // ✅ ONLY PATH
@@ -43,169 +57,74 @@ exports.getDashboardStats = async (req, res) => {
 exports.getRecommendedProfiles = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).lean();
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // ================= AGE FUNCTION =================
-    const calculateAge = (dob) => {
-      if (!dob) return null;
-
-      const birthDate = new Date(dob);
-      const today = new Date();
-
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-      }
-
-      return age;
-    };
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const userAge = calculateAge(user.dateOfBirth);
-    if (!userAge) {
-      return res.status(400).json({
-        message: "User date of birth missing",
-      });
-    }
-
     const oppositeGender = user.gender === "male" ? "female" : "male";
 
-    // ================= LOAD USER BEHAVIOR =================
-    const interests = await Interest.find({
-      senderId: user._id,
-    }).select("receiverId");
+    // Prefs
+    const prefMin = user.preferredMinAge ? Number(user.preferredMinAge) : null;
+    const prefMax = user.preferredMaxAge ? Number(user.preferredMaxAge) : null;
+    const prefMarital = user.preferredMaritalStatus;
+    const prefReligion = user.preferredReligion;
+    const prefCaste = user.preferredCaste;
 
-    const interestIds = interests.map((i) => i.receiverId.toString());
-
-    // ================= FETCH PROFILES =================
-    const profiles = await User.find({
+    // Base query
+    const query = {
       _id: { $ne: user._id },
       gender: oppositeGender,
       isActive: true,
-      role: { $ne: "admin" },
-      maritalStatus: user.maritalStatus,
-    })
-      .select(
-        "firstName lastName profilePhoto caste religion education jobLocation state dateOfBirth profileCompleted lastLogin createdAt maritalStatus rejectedBy"
-      )
-      .limit(100)
+      role: { $ne: "admin" }
+    };
+
+    // Strict Age Filter at DB level if possible, but calculateAge is complex
+    // We'll filter in memory for now as the dataset is small, 
+    // but we can optimize the query with date ranges later.
+
+    const profiles = await User.find(query)
+      .select("fullName profilePhoto caste religion jobLocation state dateOfBirth profileCompleted lastLogin createdAt maritalStatus")
+      .limit(200)
       .lean();
 
-    // ================= MATCH SCORING =================
-    let scoredProfiles = profiles.map((p) => {
-      if (!p.dateOfBirth || !p.maritalStatus) return null;
-
+    const scored = profiles.map(p => {
       let score = 0;
+      const age = calculateAge(p.dateOfBirth);
 
-      const candidateAge = calculateAge(p.dateOfBirth);
-      if (!candidateAge) return null;
-
-      // ================= AGE MATCH (STRICT + MUTUAL)
-      if (Math.abs(candidateAge - userAge) <= 5) {
-        score += 25;
-      } else {
-        return null;
+      // --- STRICT AGE FILTER ---
+      if (prefMin || prefMax) {
+        if (!age) return null;
+        if (prefMin && age < prefMin) return null;
+        if (prefMax && age > prefMax) return null;
+      } else if (userAge && age) {
+        // Fallback to reasonable range if no pref set
+        if (age < userAge - 5 || age > userAge + 5) return null;
       }
 
-      // ================= MARITAL STATUS
-      if (p.maritalStatus === user.maritalStatus) {
-        score += 20;
-      } else {
-        return null;
+      // --- STRICT MARITAL STATUS ---
+      if (prefMarital && prefMarital !== "Any") {
+        if (!p.maritalStatus || p.maritalStatus.toLowerCase() !== prefMarital.toLowerCase()) return null;
       }
 
-      // ================= RELIGION
-      if (p.religion && user.religion && p.religion === user.religion) {
-        score += 20;
+      // --- STRICT RELIGION ---
+      if (prefReligion && prefReligion !== "Any") {
+        if (p.religion !== prefReligion) return null;
       }
 
-      // ================= CASTE
-      if (p.caste && user.caste && p.caste === user.caste) {
-        score += 10;
-      }
+      // --- SCORING ---
+      if (age) score += 20;
+      if (p.religion === user.religion) score += 10;
+      if (p.caste === user.caste) score += 10;
+      if (p.jobLocation === user.jobLocation) score += 10;
+      if (p.profileCompleted >= 70) score += 10;
 
-      // ================= EDUCATION
-      if (p.education && user.education && p.education === user.education) {
-        score += 5;
-      }
+      return { ...p, age: age || "N/A", matchScore: score };
+    }).filter(Boolean);
 
-      // ================= LOCATION
-      if (
-        p.jobLocation &&
-        user.jobLocation &&
-        p.jobLocation.toLowerCase().trim() ===
-        user.jobLocation.toLowerCase().trim()
-      ) {
-        score += 15;
-      } else if (p.state && user.state && p.state === user.state) {
-        score += 8;
-      }
-
-      // ================= ACTIVITY BOOST
-      if (p.lastLogin) {
-        const hours =
-          (Date.now() - new Date(p.lastLogin)) / (1000 * 60 * 60);
-
-        if (hours <= 24) score += 10;
-        else if (hours <= 72) score += 5;
-      }
-
-      // ================= BEHAVIOR BOOST
-      if (interestIds.includes(p._id.toString())) {
-        score += 5;
-      }
-
-      // ================= PROFILE COMPLETION BOOST
-      if (p.profileCompleted >= 80) score += 10;
-      else if (p.profileCompleted >= 50) score += 5;
-
-      // ================= NEW USER BOOST
-      if (p.createdAt) {
-        const days =
-          (Date.now() - new Date(p.createdAt)) /
-          (1000 * 60 * 60 * 24);
-
-        if (days <= 3) score += 5;
-      }
-
-      // ================= NEGATIVE SIGNAL (OPTIONAL)
-      if (p.rejectedBy?.includes(user._id)) {
-        score -= 10;
-      }
-
-      return {
-        ...p,
-        matchScore: Math.round(score),
-      };
-    });
-
-    // ================= FILTER QUALITY =================
-    let filtered = scoredProfiles.filter(
-      (p) => p !== null && p.matchScore >= 40
-    );
-
-    // ================= FALLBACK =================
-    if (filtered.length === 0) {
-      filtered = scoredProfiles.filter((p) => p !== null);
-    }
-
-    // ================= FINAL SORT (WITH SMART RANDOMNESS) =================
-    filtered.sort((a, b) => {
-      if (b.matchScore === a.matchScore) {
-        return Math.random() - 0.5;
-      }
-      return b.matchScore - a.matchScore;
-    });
-
-    // ================= RESPONSE =================
-    res.json(filtered.slice(0, 10));
+    scored.sort((a, b) => b.matchScore - a.matchScore);
+    res.json(scored.slice(0, 20));
   } catch (error) {
-    console.error("Recommendation error:", error);
-    res.status(500).json({ message: "Recommendation error" });
+    console.error("Recommended error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -213,20 +132,35 @@ exports.getRecommendedProfiles = async (req, res) => {
 exports.getNewMatches = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-
     const oppositeGender = user.gender === "male" ? "female" : "male";
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Prefs
+    const prefMin = user.preferredMinAge ? Number(user.preferredMinAge) : null;
+    const prefMax = user.preferredMaxAge ? Number(user.preferredMaxAge) : null;
 
-    const matches = await User.find({
+    // Filter for profiles joined in the last 15 days
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+
+    const query = {
       _id: { $ne: user._id },
       gender: oppositeGender,
-      createdAt: { $gte: today },
+      isActive: true,
       role: { $ne: "admin" },
-    });
+      createdAt: { $gte: fifteenDaysAgo }
+    };
 
-    res.json(matches.slice(0, 6));
+    const matches = await User.find(query).sort({ createdAt: -1 }).limit(50).lean();
+
+    const filtered = matches.map(m => {
+      const age = calculateAge(m.dateOfBirth);
+      // STRICT AGE FILTER
+      if (prefMin && age < prefMin) return null;
+      if (prefMax && age > prefMax) return null;
+      return { ...m, age: age || "N/A" };
+    }).filter(Boolean);
+
+    res.json(filtered);
   } catch (error) {
     res.status(500).json({ message: "New matches error" });
   }
@@ -234,44 +168,35 @@ exports.getNewMatches = async (req, res) => {
 
 // ================= NEAR MATCHES =================
 exports.getNearMatches = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-
-    const oppositeGender = user.gender === "male" ? "female" : "male";
-
-    const matches = await User.find({
-      _id: { $ne: user._id },
-      gender: oppositeGender,
-      role: { $ne: "admin" },
-      jobLocation: new RegExp(`^${user.jobLocation}$`, "i"),
-    })
-      .limit(6)
-      .lean();
-
-    res.json(matches);
-  } catch (error) {
-    res.status(500).json({ message: "Near match error" });
-  }
+  // Near Me is being removed from UI, but keeping controller logic safe
+  res.json([]);
 };
 
 // ================= ACTIVE USERS =================
 exports.getActiveUsers = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-
     const oppositeGender = user.gender === "male" ? "female" : "male";
+    const prefMin = user.preferredMinAge ? Number(user.preferredMinAge) : null;
+    const prefMax = user.preferredMaxAge ? Number(user.preferredMaxAge) : null;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const users = await User.find({
+    const query = {
+      _id: { $ne: user._id },
       gender: oppositeGender,
-      lastLogin: { $gte: today },
       isActive: true,
-      role: { $ne: "admin" },
-    }).limit(6);
+      isOnline: true,
+    };
 
-    res.json(users);
+    const matches = await User.find(query).limit(50).lean();
+
+    const filtered = matches.map(m => {
+      const age = calculateAge(m.dateOfBirth);
+      if (prefMin && age < prefMin) return null;
+      if (prefMax && age > prefMax) return null;
+      return { ...m, age: age || "N/A" };
+    }).filter(Boolean);
+
+    res.json(filtered);
   } catch (error) {
     res.status(500).json({ message: "Active users error" });
   }
@@ -284,11 +209,19 @@ exports.getNewInterests = async (req, res) => {
       receiverId: req.user._id,
       status: "pending",
     })
-      .populate("senderId", "firstName lastName profilePhoto dateOfBirth")
+      .populate("senderId", "fullName profilePhoto dateOfBirth")
       .limit(3)
       .sort({ createdAt: -1 });
 
-    res.json(interests);
+    const formatted = interests.map((i) => ({
+      ...i.toObject(),
+      senderId: {
+        ...i.senderId.toObject(),
+        age: calculateAge(i.senderId.dateOfBirth),
+      },
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ message: "Interest fetch error" });
   }
@@ -304,11 +237,12 @@ exports.getVisitors = async (req, res) => {
     const visitors = await User.find({
       _id: { $in: visitorIds },
       role: { $ne: "admin" },
-    }).select("firstName lastName profilePhoto job");
+    }).select("fullName profilePhoto job");
 
     // 🔥 ADD THIS PART (IMPORTANT)
     const formatted = visitors.map((v) => ({
       ...v.toObject(),
+      age: calculateAge(v.dateOfBirth),
       isLiked: user.likedUsers?.some(
         (id) => id.toString() === v._id.toString()
       ),

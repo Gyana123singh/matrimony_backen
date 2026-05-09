@@ -76,7 +76,7 @@ backend/
 ```
 Basic Info: firstName, lastName, email, phone, password, gender, dateOfBirth
 Profile: profilePhoto, photos[], about, hobbies[]
-Personal: height, complexion, bloodGroup, religion, caste, maritalStatus, education, job, annualIncome
+Personal: height, complexion, bloodGroup, religion, caste, maritalStatus, job, annualIncome
 Family: fatherName, fatherJob, motherName, siblings, etc.
 Preferences: preferredGender, preferredAge, preferredReligion, preferredCaste
 Verification: isEmailVerified, isPhoneVerified, isKycVerified

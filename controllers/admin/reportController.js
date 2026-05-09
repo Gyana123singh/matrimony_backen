@@ -13,8 +13,8 @@ exports.getAllReports = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const reports = await Report.find(query)
-      .populate("reportedByUserId", "firstName lastName email")
-      .populate("reportedUserId", "firstName lastName email")
+      .populate("reportedByUserId", "fullName email")
+      .populate("reportedUserId", "fullName email")
       .limit(limit)
       .skip(skip)
       .sort({ createdAt: -1 });

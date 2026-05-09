@@ -34,8 +34,7 @@ exports.getAllPayments = async (req, res) => {
     if (search) {
       userMatch = {
         $or: [
-          { firstName: { $regex: search, $options: "i" } },
-          { lastName: { $regex: search, $options: "i" } },
+          { fullName: { $regex: search, $options: "i" } },
           { email: { $regex: search, $options: "i" } },
         ],
       };
@@ -55,7 +54,7 @@ exports.getAllPayments = async (req, res) => {
 
     // 🔥 Step 2: Fetch payments
     const payments = await Payment.find(query)
-      .populate("userId", "firstName lastName email phone profilePhoto")
+      .populate("userId", "fullName email phone profilePhoto")
       .limit(Number(limit))
       .skip(skip)
       .sort({ createdAt: -1 });
@@ -438,7 +437,7 @@ exports.getRenewals = async (req, res) => {
     }
 
     const payments = await Payment.find(query)
-      .populate("userId", "firstName lastName phone profilePhoto photos image")
+      .populate("userId", "fullName phone profilePhoto photos image")
       .populate("packageId", "validity")
       .sort({ createdAt: -1 });
 
@@ -454,8 +453,7 @@ exports.getRenewals = async (req, res) => {
 
       return {
         id: p._id,
-        userName:
-          `${p.userId?.firstName || ""} ${p.userId?.lastName || ""}`.trim(),
+        userName: p.userId?.fullName || "",
         packageName: p.packageName,
         // Use explicit start/end when available (from payment confirmation)
         startDate: p.startDate || p.createdAt,

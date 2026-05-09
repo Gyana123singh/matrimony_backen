@@ -1,5 +1,19 @@
 const User = require("../../models/User");
 
+// ================= HELPERS =================
+const calculateAge = (dob) => {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+
 // Search profiles
 exports.searchProfiles = async (req, res) => {
   try {
@@ -10,7 +24,7 @@ exports.searchProfiles = async (req, res) => {
       maxAge,
       religion,
       caste,
-      education,
+
       location,
       profession,
       maritalStatus,
@@ -29,7 +43,7 @@ exports.searchProfiles = async (req, res) => {
     if (gender) query.gender = gender;
     if (religion) query.religion = religion;
     if (caste) query.caste = caste;
-    if (education) query.education = education;
+
 
     // Support flexible location matching:
     // - if `location` is provided as a comma separated string (e.g. "State, City"), split and match any part
@@ -122,6 +136,7 @@ exports.searchProfiles = async (req, res) => {
 
     profiles = profiles.map((p) => {
       const obj = p.toObject();
+      obj.age = calculateAge(obj.dateOfBirth);
 
       const hidePhotos = obj.privacySettings?.hidePhotos;
 
@@ -162,7 +177,7 @@ exports.publicSearchProfiles = async (req, res) => {
       maxAge,
       religion,
       caste,
-      education,
+
       location,
       profession,
       maritalStatus,
@@ -180,7 +195,7 @@ exports.publicSearchProfiles = async (req, res) => {
     if (gender) query.gender = gender;
     if (religion) query.religion = religion;
     if (caste) query.caste = caste;
-    if (education) query.education = education;
+
 
     // Support flexible location matching for public search as well
     if (location || req.query.state || req.query.city) {
@@ -303,9 +318,36 @@ exports.getMatches = async (req, res) => {
     };
 
     // Apply user preferences
-    if (user.preferredGender) query.gender = user.preferredGender;
-    if (user.preferredReligion) query.religion = user.preferredReligion;
-    if (user.preferredCaste) query.caste = user.preferredCaste;
+    if (user.preferredGender && user.preferredGender !== "Any") {
+      query.gender = user.preferredGender.toLowerCase();
+    } else {
+      query.gender = user.gender === "male" ? "female" : "male";
+    }
+
+    if (user.preferredReligion && user.preferredReligion !== "Any") {
+      query.religion = user.preferredReligion;
+    }
+    if (user.preferredCaste && user.preferredCaste !== "Any") {
+      query.caste = user.preferredCaste;
+    }
+    if (user.preferredMaritalStatus && user.preferredMaritalStatus !== "Any") {
+      query.maritalStatus = user.preferredMaritalStatus;
+    }
+
+    // Apply Age Range
+    const userAge = calculateAge(user.dateOfBirth);
+    const prefMin = user.preferredMinAge ? Number(user.preferredMinAge) : null;
+    const prefMax = user.preferredMaxAge ? Number(user.preferredMaxAge) : null;
+    
+    // Strict rule: If user has set preferences, use them strictly. 
+    const minAge = (prefMin && prefMin >= 18) ? prefMin : (userAge - 5);
+    const maxAge = (prefMax && prefMax >= 18) ? prefMax : (userAge + 5);
+
+    // Filter by age in query for performance
+    const today = new Date();
+    const minDob = new Date(today.getFullYear() - maxAge - 1, today.getMonth(), today.getDate());
+    const maxDob = new Date(today.getFullYear() - minAge, today.getMonth(), today.getDate());
+    query.dateOfBirth = { $gte: minDob, $lte: maxDob };
 
     const skip = (page - 1) * limit;
 
@@ -429,7 +471,7 @@ exports.unlockContact = async (req, res) => {
       return res.status(403).json({ message: "Upgrade required" });
     }
 
-    const profile = await User.findById(profileId).select("phone email firstName lastName");
+    const profile = await User.findById(profileId).select("phone email fullName");
     if (!profile) return res.status(404).json({ message: "Profile not found" });
 
     res.status(200).json({

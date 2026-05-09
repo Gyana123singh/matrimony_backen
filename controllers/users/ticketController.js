@@ -68,9 +68,7 @@ exports.replyTicket = async (req, res) => {
 
     const isAdmin = req.user && req.user.role === "admin";
     const senderType = isAdmin ? "admin" : "user";
-    const senderName = req.user?.firstName
-      ? `${req.user.firstName} ${req.user.lastName || ""}`.trim()
-      : (req.user?.name || "Admin");
+    const senderName = req.user?.fullName || (req.user?.name || "Admin");
 
     ticket.replies.push({ senderType, senderName, message });
 
@@ -81,8 +79,8 @@ exports.replyTicket = async (req, res) => {
     await ticket.save();
 
     const populated = await Ticket.findById(id)
-      .populate("userId", "firstName lastName email")
-      .populate("assignedTo", "firstName lastName email");
+      .populate("userId", "fullName email")
+      .populate("assignedTo", "fullName email");
 
     // Server-side debug log
     try {
