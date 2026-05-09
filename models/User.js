@@ -299,14 +299,14 @@ const userSchema = new mongoose.Schema(
 
     visitedProfiles: [
       {
-        userId: mongoose.Schema.Types.ObjectId,
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         visitedAt: { type: Date, default: Date.now },
       },
     ],
 
     visitors: [
       {
-        userId: mongoose.Schema.Types.ObjectId,
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         visitedAt: { type: Date, default: Date.now },
       },
     ],
