@@ -239,9 +239,22 @@ exports.getVisitors = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Map through visitors array to get populated user info + visitedAt
-    const formatted = (user.visitors || [])
-      .filter((v) => v.userId && typeof v.userId === 'object') // Ensure user is populated
+    // Deduplicate visitors by userId, keeping the latest visit
+    const uniqueVisitorsMap = new Map();
+    
+    (user.visitors || []).forEach((v) => {
+      if (v.userId && typeof v.userId === 'object') {
+        const id = v.userId._id.toString();
+        const existing = uniqueVisitorsMap.get(id);
+        
+        if (!existing || new Date(v.visitedAt) > new Date(existing.visitedAt)) {
+          uniqueVisitorsMap.set(id, v);
+        }
+      }
+    });
+
+    // Map unique visitors to formatted objects
+    const formatted = Array.from(uniqueVisitorsMap.values())
       .map((v) => {
         const u = v.userId;
         const name = u.fullName || 
@@ -259,7 +272,7 @@ exports.getVisitors = async (req, res) => {
           ),
         };
       })
-      .reverse(); // Show latest visitors first
+      .sort((a, b) => new Date(b.visitedAt) - new Date(a.visitedAt)); // Show latest visitors first
 
     res.json(formatted);
   } catch (error) {
@@ -278,14 +291,40 @@ exports.trackVisit = async (req, res) => {
       return res.json({ message: "Self visit ignored" });
     }
 
-    await User.findByIdAndUpdate(profileId, {
-      $push: {
-        visitors: {
-          userId: visitorId,
-          visitedAt: new Date(),
-        },
-      },
-    });
+    // 1. Update the profile being visited (add/update the visitor)
+    const profileUpdate = await User.updateOne(
+      { _id: profileId, "visitors.userId": visitorId },
+      { $set: { "visitors.$.visitedAt": new Date() } }
+    );
+
+    if (profileUpdate.modifiedCount === 0) {
+      // If not updated, it means this visitor is new to this profile
+      await User.updateOne(
+        { _id: profileId },
+        { 
+          $push: { 
+            visitors: { userId: visitorId, visitedAt: new Date() } 
+          } 
+        }
+      );
+    }
+
+    // 2. Update the visitor's own record of profiles they've visited
+    const visitorUpdate = await User.updateOne(
+      { _id: visitorId, "visitedProfiles.userId": profileId },
+      { $set: { "visitedProfiles.$.visitedAt": new Date() } }
+    );
+
+    if (visitorUpdate.modifiedCount === 0) {
+      await User.updateOne(
+        { _id: visitorId },
+        { 
+          $push: { 
+            visitedProfiles: { userId: profileId, visitedAt: new Date() } 
+          } 
+        }
+      );
+    }
 
     res.json({ message: "Visit tracked" });
   } catch (error) {
