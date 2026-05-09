@@ -230,26 +230,34 @@ exports.getNewInterests = async (req, res) => {
 // ================= VISITORS =================
 exports.getVisitors = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).populate({
+      path: "visitors.userId",
+      select: "fullName profilePhoto job jobLocation dateOfBirth gender",
+    });
 
-    const visitorIds = user.visitors.map((v) => v.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    const visitors = await User.find({
-      _id: { $in: visitorIds },
-      role: { $ne: "admin" },
-    }).select("fullName profilePhoto job");
-
-    // 🔥 ADD THIS PART (IMPORTANT)
-    const formatted = visitors.map((v) => ({
-      ...v.toObject(),
-      age: calculateAge(v.dateOfBirth),
-      isLiked: user.likedUsers?.some(
-        (id) => id.toString() === v._id.toString()
-      ),
-    }));
+    // Map through visitors array to get populated user info + visitedAt
+    const formatted = (user.visitors || [])
+      .filter((v) => v.userId) // Ensure user still exists
+      .map((v) => ({
+        _id: v.userId._id,
+        fullName: v.userId.fullName,
+        profilePhoto: v.userId.profilePhoto,
+        job: v.userId.job || v.userId.jobLocation,
+        visitedAt: v.visitedAt,
+        age: calculateAge(v.userId.dateOfBirth),
+        isLiked: user.likedUsers?.some(
+          (id) => id.toString() === v.userId._id.toString()
+        ),
+      }))
+      .reverse(); // Show latest visitors first
 
     res.json(formatted);
   } catch (error) {
+    console.error("Visitors fetch error:", error);
     res.status(500).json({ message: "Visitors fetch error" });
   }
 };

@@ -29,7 +29,7 @@ router.get("/near-matches", getNearMatches);
 router.get("/active-users", getActiveUsers);
 router.get("/visitors", getVisitors);
 // Keep read-only dashboard endpoints open to all authenticated users (no subscription required)
-router.post("/visit/:profileId", checkSubscription, trackVisit);
+router.post("/visit/:profileId", trackVisit);
 router.post("/like/:profileId", checkSubscription, toggleLike);
 
 
