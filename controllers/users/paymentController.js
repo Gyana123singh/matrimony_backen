@@ -79,6 +79,12 @@ exports.createPaymentIntent = async (req, res) => {
     // ✅ SAVE ONLY ONCE
     await payment.save();
 
+    // 🔥 FETCH USER DATA FOR BILLING
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     // 🔥 PARAM STRING FOR CCAVENUE
     const params = [
       `merchant_id=${merchant_id}`,
@@ -91,6 +97,16 @@ exports.createPaymentIntent = async (req, res) => {
       `merchant_param1=${userId}`,
       `merchant_param2=${package._id}`,
       `merchant_param3=${package.name}`,
+      
+      // ✅ AUTO-FILL BILLING INFORMATION
+      `billing_name=${user.fullName || ""}`,
+      `billing_address=${user.presentAddress || user.city || ""}`,
+      `billing_city=${user.city || ""}`,
+      `billing_state=${user.state || ""}`,
+      `billing_zip=${user.zipCode || ""}`, // will be empty if not in model, but CCAvenue handles it
+      `billing_country=${user.country || "India"}`,
+      `billing_tel=${user.phone || ""}`,
+      `billing_email=${user.email || ""}`,
     ];
 
     const paramString = params.join("&");
