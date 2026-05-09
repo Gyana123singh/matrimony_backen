@@ -242,20 +242,17 @@ exports.getVisitors = async (req, res) => {
     // Map through visitors array to get populated user info + visitedAt
     const formatted = (user.visitors || [])
       .filter((v) => v.userId) // Ensure user still exists
-      .map((v) => {
-        const visitor = v.toObject ? v.toObject() : v;
-        return {
-          _id: visitor.userId._id,
-          fullName: visitor.userId.fullName,
-          profilePhoto: visitor.userId.profilePhoto,
-          job: visitor.userId.job || visitor.userId.jobLocation,
-          visitedAt: visitor.visitedAt,
-          age: calculateAge(visitor.userId.dateOfBirth),
-          isLiked: user.likedUsers?.some(
-            (id) => id.toString() === visitor.userId._id.toString()
-          ),
-        };
-      })
+      .map((v) => ({
+        _id: v.userId._id,
+        fullName: v.userId.fullName,
+        profilePhoto: v.userId.profilePhoto,
+        job: v.userId.job || v.userId.jobLocation,
+        visitedAt: v.visitedAt,
+        age: calculateAge(v.userId.dateOfBirth),
+        isLiked: user.likedUsers?.some(
+          (id) => id.toString() === v.userId._id.toString()
+        ),
+      }))
       .reverse(); // Show latest visitors first
 
     res.json(formatted);
