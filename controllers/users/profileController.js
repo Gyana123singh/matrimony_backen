@@ -566,12 +566,19 @@ exports.getUserDashboard = async (req, res) => {
     }).select("firstName lastName profilePhoto job jobLocation");
 
     // ================= MATCH RECOMMENDATION =================
-    const recommendedProfiles = await User.find({
-      gender: user.preferredGender,
+    const recommendationQuery = {
       isActive: true,
       isBanned: false,
       _id: { $ne: userId },
-    })
+    };
+
+    if (user.preferredGender && user.preferredGender !== "Any") {
+      recommendationQuery.gender = user.preferredGender.toLowerCase();
+    } else {
+      recommendationQuery.gender = user.gender === "male" ? "female" : "male";
+    }
+
+    const recommendedProfiles = await User.find(recommendationQuery)
       .select("firstName lastName profilePhoto job jobLocation dateOfBirth")
       .limit(8);
 
@@ -579,11 +586,18 @@ exports.getUserDashboard = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const newMatches = await User.find({
-      gender: user.preferredGender,
+    const matchesQuery = {
       createdAt: { $gte: today },
       _id: { $ne: userId },
-    })
+    };
+
+    if (user.preferredGender && user.preferredGender !== "Any") {
+      matchesQuery.gender = user.preferredGender.toLowerCase();
+    } else {
+      matchesQuery.gender = user.gender === "male" ? "female" : "male";
+    }
+
+    const newMatches = await User.find(matchesQuery)
       .select("firstName lastName profilePhoto job jobLocation dateOfBirth")
       .limit(4);
 
